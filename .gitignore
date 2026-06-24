@@ -41,3 +41,22 @@ __pycache__/
 web/assets/
 web/index.html
 
+
+# AI 工具本地配置
+.claude/settings.local.json
+.cursor/
+.aider*
+.continue/
+
+.cody/
+
+# 密钥和凭证
+*.pem
+*.key
+credentials.json
+.npmrc
+.aws/
+.ssh/
+
+# docker中mysql的数据
+.docker/mysql/data/**
