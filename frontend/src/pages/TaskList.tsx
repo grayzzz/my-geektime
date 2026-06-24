@@ -4,8 +4,10 @@ import {
   deleteTask,
   retryTask,
   exportTask,
+  downloadPdfBlob,
   TaskItem,
 } from '@/api/task'
+import { downloadFileFromBlob } from '@/utils/request'
 import { createCollect } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
 import { Button, Card, Select, Input, Spinner, Modal } from '@/components/ui'
@@ -74,10 +76,11 @@ export const TaskList: React.FC = () => {
   const [loadMoreLoading, setLoadMoreLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [showBackToTop, setShowBackToTop] = useState(false)
+  const [pdfDownloading, setPdfDownloading] = useState(false)
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLElement | null>(null)
-  const { addToast } = useToast()
+  const { addToast, removeToast } = useToast()
 
   const {
     lessonList,
@@ -222,14 +225,51 @@ export const TaskList: React.FC = () => {
     }
   }
 
-  const handleExport = (pid: string, type: string) => {
+  const handleExport = (pid: string, type: string, mode?: string, taskName?: string) => {
+    // 文件名清洗：与后端 VerifyFileName 保持一致，避免 Windows 非法字符
+    const sanitizeFileName = (name: string) =>
+      name
+        .replace(/"/g, '-')                          // " → -
+        .replace(/\|/g, '-')                         // | → -
+        .replace(/｜/g, '-')                         // 全角 ｜ → -
+        .replace(/:/g, '：')                         // : → ：
+        .replace(/”/g, '“')                     // " (right double quote) → ""
+        .replace(/\?/g, '？')                        // ? → ？
+        .replace(/&/g, '+')                          // & → +
+        .replace(/\t/g, '')                          // tab → 空
+        .replace(/ /g, '')                           // 空格 → 空
+        .trim()
+
+    const safeName = taskName ? sanitizeFileName(taskName) : pid
+    // 课程 PDF 导出（走 axios + blob 下载，携带 token）
+    if (mode === 'course' && type === 'pdf') {
+      if (pdfDownloading) return
+      setPdfDownloading(true)
+      const loadingId = addToast('正在生成PDF，请稍候...', 'info', Infinity)
+      downloadPdfBlob({ pid })
+        .then((blob) => {
+          downloadFileFromBlob(blob, `${safeName}.pdf`)
+          removeToast(loadingId)
+          addToast('PDF导出成功', 'success')
+        })
+        .catch((error) => {
+          console.error('Failed to export PDF', error)
+          removeToast(loadingId)
+          addToast(error?.message || 'PDF导出失败', 'error')
+        })
+        .finally(() => {
+          setPdfDownloading(false)
+        })
+      return
+    }
+
     if (type === 'markdown') {
       exportTask({ pid, type })
         .then((blob) => {
           const url = window.URL.createObjectURL(blob as Blob)
           const a = document.createElement('a')
           a.href = url
-          a.download = `${pid}-${type}.tar.gz`
+          a.download = `${safeName}-${type}.tar.gz`
           a.click()
           window.URL.revokeObjectURL(url)
         })
@@ -325,7 +365,8 @@ export const TaskList: React.FC = () => {
       return
     }
     const ids = Array.from(selectedItems)
-    handleExport(ids[0], type)
+    const selectedItem = items.find(i => i.task_id === ids[0])
+    handleExport(ids[0], type, undefined, selectedItem?.task_name)
   }
 
   const handleBatchRetry = () => {
@@ -495,7 +536,7 @@ export const TaskList: React.FC = () => {
         </div>
 
         {selectedItems.size > 0 && (
-          <div className="bg-primary-50 rounded-lg p-3 mb-4 flex items-center justify-between">
+          <div className="bg-primary-50 rounded-lg p-3 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
             <span className="text-sm text-primary-600">
               已选择 <span className="font-semibold">{selectedItems.size}</span> 个课程
             </span>
@@ -504,7 +545,7 @@ export const TaskList: React.FC = () => {
                 <Button size="sm" variant="light" onClick={handleBatchCollect} className="!p-2">
                   <Heart size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   批量收藏
                 </div>
               </div>
@@ -512,7 +553,7 @@ export const TaskList: React.FC = () => {
                 <Button size="sm" variant="light" onClick={() => handleBatchExport('markdown')} className="!p-2">
                   <FileText size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   批量导出Markdown
                 </div>
               </div>
@@ -522,7 +563,7 @@ export const TaskList: React.FC = () => {
                     <Button size="sm" variant="light" onClick={handleBatchRetry} className="!p-2">
                       <RefreshCw size={14} />
                     </Button>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                       批量重新下载
                     </div>
                   </div>
@@ -530,7 +571,7 @@ export const TaskList: React.FC = () => {
                     <Button size="sm" variant="danger" onClick={handleBatchDelete} className="!p-2">
                       <Trash2 size={14} />
                     </Button>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                       批量删除
                     </div>
                   </div>
@@ -561,6 +602,7 @@ export const TaskList: React.FC = () => {
                   onRetry={handleRetry}
                   onDelete={handleDelete}
                   onCollect={handleSingleCollect}
+                  isExporting={pdfDownloading}
                 />
               ))}
             </div>

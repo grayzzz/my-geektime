@@ -109,8 +109,10 @@ type TaskInfoResponse struct {
 }
 
 type TaskDownloadRequest struct {
-	// task id
-	Id string `json:"id,omitempty" form:"id" binding:"required"`
+	// task id (single article)
+	Id string `json:"id,omitempty" form:"id"`
+	// task pid (course level, for batch export)
+	Pid string `json:"pid,omitempty" form:"pid"`
 	// type
 	Type string `json:"type,omitempty" form:"type" binding:"required"`
 	// url

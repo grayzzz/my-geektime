@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -364,17 +365,34 @@ func (t *Task) Download(c *gin.Context) {
 		global.FAIL(c, "fail.msg", err.Error())
 		return
 	}
+
 	var l model.Task
-	if err := global.DB.Model(&model.Task{}).
-		Where(&model.Task{TaskId: req.Id}).First(&l).Error; err != nil {
-		global.FAIL(c, "fail.msg", err.Error())
+	if req.Id != "" {
+		if err := global.DB.Model(&model.Task{}).
+			Where(&model.Task{TaskId: req.Id}).First(&l).Error; err != nil {
+			global.FAIL(c, "fail.msg", err.Error())
+			return
+		}
+	} else if req.Pid != "" {
+		if err := global.DB.Model(&model.Task{}).
+			Where(&model.Task{TaskId: req.Pid}).First(&l).Error; err != nil {
+			global.FAIL(c, "fail.msg", err.Error())
+			return
+		}
+	} else {
+		global.FAIL(c, "fail.msg", "id or pid is required")
 		return
 	}
+
+	// articleData 仅在单章导出（req.Id != ""）时需要
 	var articleData geek.ArticleData
-	if err := json.Unmarshal(l.Raw, &articleData); err != nil {
-		global.FAIL(c, "fail.msg", err.Error())
-		return
+	if req.Id != "" {
+		if err := json.Unmarshal(l.Raw, &articleData); err != nil {
+			global.FAIL(c, "fail.msg", err.Error())
+			return
+		}
 	}
+
 	var taskMessage task.TaskMessage
 	if len(l.Message) > 0 {
 		if err := json.Unmarshal(l.Message, &taskMessage); err != nil {
@@ -382,7 +400,16 @@ func (t *Task) Download(c *gin.Context) {
 			return
 		}
 	}
-	baseName := service.VerifyFileName(articleData.Info.Title)
+
+	baseName := ""
+	if req.Id != "" {
+		title := articleData.Info.Title
+		if title == "" {
+			title = l.TaskName
+		}
+		baseName = service.VerifyFileName(title)
+	}
+
 	switch req.Type {
 	case "markdown":
 		if len(articleData.Info.Cshort) > len(articleData.Info.Content) {
@@ -398,6 +425,49 @@ func (t *Task) Download(c *gin.Context) {
 		c.Header("Content-Disposition", "attachment; filename="+url.QueryEscape(fileName))
 		c.Header("Content-Transfer-Encoding", "binary")
 		c.Data(200, "application/octet-stream", []byte(markdown))
+	case "pdf":
+		if req.Pid != "" {
+			// 课程级 PDF 导出（所有章节合并）
+			// 查询课程信息
+			var courseTask model.Task
+			if err := global.DB.Model(&model.Task{}).
+				Where(&model.Task{TaskId: req.Pid}).First(&courseTask).Error; err != nil {
+				global.FAIL(c, "fail.msg", err.Error())
+				return
+			}
+			pdfBytes, err := service.GenerateCoursePDF(c.Request.Context(), req.Pid)
+			if err != nil {
+				global.FAIL(c, "fail.msg", err.Error())
+				return
+			}
+			pdfFileName := service.VerifyFileName(courseTask.TaskName) + ".pdf"
+			global.LOG.Info("download.pdf.course",
+				zap.String("pid", req.Pid),
+				zap.String("filename", pdfFileName),
+				zap.Int("pdfBytes", len(pdfBytes)),
+			)
+			c.Header("Content-Type", "application/pdf")
+			// 不使用 Content-Disposition: attachment，避免 IDM 拦截返回 204
+			c.Writer.Write(pdfBytes)
+			return
+		} else {
+			// 单章 PDF 导出
+			pdfBytes, err := service.GenerateArticlePDF(c.Request.Context(), req.Id)
+			if err != nil {
+				global.FAIL(c, "fail.msg", err.Error())
+				return
+			}
+			pdfFileName := baseName + ".pdf"
+			global.LOG.Info("download.pdf.single",
+				zap.String("taskId", req.Id),
+				zap.String("filename", pdfFileName),
+				zap.Int("pdfBytes", len(pdfBytes)),
+			)
+			c.Header("Content-Type", "application/pdf")
+			// 不使用 Content-Disposition: attachment，避免 IDM 等下载管理器拦截返回 204
+			c.Writer.Write(pdfBytes)
+			return
+		}
 	case "audio", "video":
 		fileName := baseName + ".ts"
 		if req.Type == "audio" {
@@ -577,7 +647,7 @@ func (t *Task) PlayPart(c *gin.Context) {
 			zap.String("contentType", storage.TypeByExtension(req.P)),
 		)
 		if fi, stat, err := global.Storage.Get(cacheKey); err != nil {
-			if !strings.Contains(err.Error(), "no such file or directory") {
+			if !os.IsNotExist(err) {
 				global.LOG.Error("task.PlayPart.Get", zap.Error(err), zap.String("cacheKey", cacheKey))
 				c.DataFromReader(404, 0, "", nil, nil)
 				return

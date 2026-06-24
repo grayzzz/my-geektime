@@ -32,10 +32,10 @@ request.interceptors.request.use(
 )
 
 request.interceptors.response.use(
-  (response) => {
+  async (response) => {
     // 响应成功时隐藏 loading
     useLoadingStore.getState().hideLoading()
-    
+
     if (response.config.responseType === 'blob') {
       return response.data
     }
@@ -73,5 +73,20 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+export const downloadFileFromBlob = (blob: Blob, filename: string) => {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  // 延迟 revoke，给浏览器足够时间发起下载请求
+  // 立即 revoke 会导致部分浏览器下载失败（blob URL 在 download 完成前被撤销）
+  setTimeout(() => {
+    window.URL.revokeObjectURL(url)
+  }, 100)
+}
 
 export default request

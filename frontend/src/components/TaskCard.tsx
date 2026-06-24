@@ -1,7 +1,7 @@
 import React from 'react'
 import { Button } from '@/components/ui'
 import { TaskItem } from '@/api/task'
-import { Trash2, List, Download, Book, Sparkles, ExternalLink, Heart, FileText } from 'lucide-react'
+import { Trash2, List, Download, Book, Sparkles, ExternalLink, Heart, FileText, FileDown } from 'lucide-react'
 
 interface TaskCardProps {
   item: TaskItem
@@ -11,10 +11,11 @@ interface TaskCardProps {
   geektimeDirection: any[]
   onToggleSelect: (id: string) => void
   onOpenLesson: (item: TaskItem) => void
-  onExport: (pid: string, type: string) => void
+  onExport: (pid: string, type: string, mode?: string, taskName?: string) => void
   onRetry: (pid?: string, ids?: string[]) => void
   onDelete: (ids: string[]) => void
   onCollect: (id: string) => void
+  isExporting?: boolean
 }
 
 const productTypeOptions = [
@@ -55,6 +56,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onRetry,
   onDelete,
   onCollect,
+  isExporting,
 }) => {
   const getDirectionText = (group: number) => {
     const dirItem = geektimeDirection.find((o: any) => Number(o.value) === group)
@@ -159,7 +161,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             </div>
           )}
         </div>
-        <div className="mt-3 flex items-center justify-between">
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="relative group">
               <Button
@@ -173,8 +175,25 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               >
                 <List size={14} />
               </Button>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 课程
+              </div>
+            </div>
+            <div className="relative group">
+              <Button
+                variant="light"
+                size="sm"
+                disabled={isExporting}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onExport(item.task_id, 'pdf', 'course', item.task_name)
+                }}
+                className="!p-2"
+              >
+                <FileDown size={14} />
+              </Button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
+                导出课程PDF
               </div>
             </div>
             <div className="relative group">
@@ -183,13 +202,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 size="sm"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onExport(item.task_id, 'markdown')
+                  onExport(item.task_id, 'markdown', undefined, item.task_name)
                 }}
                 className="!p-2"
               >
                 <FileText size={14} />
               </Button>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 导出Markdown
               </div>
             </div>
@@ -206,7 +225,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 >
                   <Book size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   文档
                 </div>
               </div>
@@ -217,13 +236,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   size="sm"
                   onClick={(e) => {
                     e.stopPropagation()
-                    onExport(item.task_id, 'docsite')
+                    onExport(item.task_id, 'docsite', undefined, item.task_name)
                   }}
                   className="!p-2"
                 >
                   <Sparkles size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   生成文档
                 </div>
               </div>
@@ -241,7 +260,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 >
                   <Download size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   下载资源
                 </div>
               </div>
@@ -259,7 +278,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                 >
                   <ExternalLink size={14} />
                 </Button>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   查看源站
                 </div>
               </div>
@@ -276,7 +295,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               >
                 <Heart size={14} />
               </Button>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 收藏
               </div>
             </div>
@@ -294,7 +313,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               >
                 <Trash2 size={14} />
               </Button>
-              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 删除
               </div>
             </div>

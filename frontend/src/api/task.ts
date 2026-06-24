@@ -136,6 +136,14 @@ export const getArticleComments = (params: { aid: string; page?: number; perPage
   return request.get('/task/article/comments', { params })
 }
 
+export const downloadPdfBlob = (params: { id?: string; pid?: string }) => {
+  return request.get<any, Blob>('/task/download', {
+    params: { ...params, type: 'pdf' },
+    responseType: 'blob',
+    timeout: 600000,
+  })
+}
+
 export const getCommentDiscussions = (params: {
   target_id: string
   target_type: number

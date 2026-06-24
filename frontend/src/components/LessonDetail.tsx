@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { X, ExternalLink, FileText, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp } from 'lucide-react'
-import { getTaskInfo, getArticleComments, getCommentDiscussions, type TaskInfoResponse } from '@/api/task'
+import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp } from 'lucide-react'
+import { getTaskInfo, getArticleComments, getCommentDiscussions, type TaskInfoResponse, downloadPdfBlob } from '@/api/task'
+import { downloadFileFromBlob, showErrorMessage } from '@/utils/request'
 import type Hls from 'hls.js'
 
 interface LessonDetailProps {
@@ -25,6 +26,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   hasNext,
 }) => {
   const [loading, setLoading] = useState(false)
+  const [pdfDownloading, setPdfDownloading] = useState(false)
   const [taskInfoResponse, setTaskInfoResponse] = useState<TaskInfoResponse | null>(null)
   const taskInfo = taskInfoResponse?.task || null
   const article = taskInfoResponse?.article || null
@@ -37,6 +39,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   const [isResizing, setIsResizing] = useState(false)
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, width: 0, height: 0 })
   const [drawerWidth, setDrawerWidth] = useState<number>(1024) // max-w-4xl = 1024px
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 768 : false)
+  const isMobileRef = useRef(isMobile)
+  isMobileRef.current = isMobile
   const isDrawerResizing = useRef(false)
   const drawerResizeStartX = useRef(0)
   const drawerResizeStartWidth = useRef(0)
@@ -48,11 +53,18 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   const [commentsHasMore, setCommentsHasMore] = useState(false)
   const [commentsTotal, setCommentsTotal] = useState(0)
   const [expandedDiscussions, setExpandedDiscussions] = useState<Set<string>>(new Set())
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const floatingPlayerRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const prevTaskIdRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const loadComments = async (aid: string, page: number) => {
     console.log('loadComments called:', aid, page)
@@ -62,7 +74,6 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       console.log('comments response:', res)
       const items = res?.rows || res?.items || res?.data?.rows || res?.data?.items || []
       const total = res?.count || res?.total || 0
-      console.log('comments items:', items)
       if (page === 1) {
         setComments(items)
       } else {
@@ -131,6 +142,27 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
     }
   }
 
+  // ESC 关闭图片预览
+  useEffect(() => {
+    if (!previewImage) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPreviewImage(null)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [previewImage])
+
+  const handleImageClick = useCallback((e: React.MouseEvent) => {
+    const target = e.target as HTMLElement
+    if (target.tagName === 'IMG') {
+      const src = (target as HTMLImageElement).src
+      if (src) {
+        e.stopPropagation()
+        setPreviewImage(src)
+      }
+    }
+  }, [])
+
   const loadMoreDiscussions = (commentId: string) => {
     const comment = comments.find(c => c.id === commentId)
     if (comment) {
@@ -185,7 +217,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       const rect = container.getBoundingClientRect()
       const contentElement = contentRef.current
       
-      if (rect.bottom < 100) {
+      if (isMobileRef.current) {
+        setShowFloatingPlayer(false) // 手机端禁用浮动播放器
+      } else if (rect.bottom < 100) {
         setShowFloatingPlayer(true)
       } else if (rect.bottom > 200) {
         setShowFloatingPlayer(false)
@@ -479,7 +513,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
     return (
       <button
         onClick={scrollToTop}
-        className="fixed bottom-8 right-8 w-12 h-12 rounded-full bg-white text-primary-600 border-2 border-primary-300 shadow-lg hover:bg-primary-50 hover:border-primary-400 transition-all duration-300 flex items-center justify-center z-[95] hover:scale-110"
+        className="fixed bottom-4 right-4 sm:bottom-8 sm:right-8 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-white text-primary-600 border-2 border-primary-300 shadow-lg hover:bg-primary-50 hover:border-primary-400 transition-all duration-300 flex items-center justify-center z-[95] hover:scale-110"
         title="返回顶部"
       >
         <Rocket size={20} />
@@ -579,20 +613,22 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       />
       {renderScrollTopButton()}
       
-      {videoSrc && showFloatingPlayer && renderVideoPlayer()}
+      {videoSrc && showFloatingPlayer && !isMobileRef.current && renderVideoPlayer()}
 
-      <div 
+      <div
         className="fixed right-0 top-0 h-full bg-white shadow-2xl overflow-hidden z-[90] transition-all duration-300 ease-in-out"
-        style={{ width: drawerWidth }}
+        style={{ width: isMobile ? '100%' : drawerWidth }}
       >
-        {/* 左侧拖拽手柄 */}
-        <div
-          className="absolute left-0 top-0 bottom-0 w-4 cursor-col-resize hover:bg-primary-500/20 transition-colors group active:cursor-col-resize z-10"
-          onMouseDown={handleDrawerResizeStart}
-          title="拖动调整宽度"
-        >
-          <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-gray-300 group-hover:bg-primary-500 rounded-full transition-colors" />
-        </div>
+        {/* 左侧拖拽手柄（仅桌面端显示） */}
+        {!isMobile && (
+          <div
+            className="absolute left-0 top-0 bottom-0 w-4 cursor-col-resize hover:bg-primary-500/20 transition-colors group active:cursor-col-resize z-10"
+            onMouseDown={handleDrawerResizeStart}
+            title="拖动调整宽度"
+          >
+            <div className="absolute left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-gray-300 group-hover:bg-primary-500 rounded-full transition-colors" />
+          </div>
+        )}
         <div className="h-full flex flex-col">
           <div className="flex items-center justify-between p-4 border-b border-primary-100 bg-gradient-to-r from-primary-50 to-primary-100">
             <div className="flex-1">
@@ -611,7 +647,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
             </button>
           </div>
 
-          <div ref={contentRef} className="flex-1 overflow-y-auto p-4">
+          <div ref={contentRef} className="flex-1 overflow-y-auto p-3 sm:p-4">
             {loading ? (
               <div className="flex justify-center py-20">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500" />
@@ -621,15 +657,15 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                 {videoSrc && !showFloatingPlayer && renderVideoPlayer()}
                 {videoSrc && showFloatingPlayer && (
                   <div className="bg-gray-100 rounded-lg p-4 flex justify-center">
-                    <div className="w-full max-w-full h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
-                      <span className="text-gray-400">视频正在浮动窗口播放</span>
+                    <div className="w-full max-w-full h-36 sm:h-[250px] md:h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
+                      <span className="text-gray-400 text-sm sm:text-base">视频正在浮动窗口播放</span>
                     </div>
                   </div>
                 )}
                 {!videoSrc && (
                   <div ref={videoContainerRef} className="bg-gray-100 rounded-lg p-4 flex justify-center">
-                    <div className="w-full max-w-full h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
-                      <span className="text-gray-400">无视频</span>
+                    <div className="w-full max-w-full h-36 sm:h-[250px] md:h-[300px] bg-gray-200 rounded-lg flex items-center justify-center">
+                      <span className="text-gray-400 text-sm sm:text-base">无视频</span>
                     </div>
                   </div>
                 )}
@@ -645,7 +681,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                       >
                         <ExternalLink size={14} />
                       </a>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
                         查看源站
                       </div>
                     </div>
@@ -657,8 +693,43 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                     >
                       <FileText size={14} />
                     </a>
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
                       导出Markdown
+                    </div>
+                  </div>
+                  <div className="relative group">
+                    <button
+                      disabled={pdfDownloading}
+                      onClick={async () => {
+                        setPdfDownloading(true)
+                        try {
+                          const blob = await downloadPdfBlob({ id: taskId! })
+                          // 用文章标题作为文件名，与 TaskList 保持一致
+                          const title = article?.title || taskInfo?.name || taskId
+                          const safeName = title
+                            .replace(/"/g, '-')
+                            .replace(/\|/g, '-')
+                            .replace(/｜/g, '-')
+                            .replace(/:/g, '：')
+                            .replace(/”/g, '“')
+                            .replace(/\?/g, '？')
+                            .replace(/&/g, '+')
+                            .replace(/\t/g, '')
+                            .replace(/ /g, '')
+                            .trim()
+                          downloadFileFromBlob(blob, `${safeName}.pdf`)
+                        } catch (err: any) {
+                          showErrorMessage(err?.message || '导出PDF失败')
+                        } finally {
+                          setPdfDownloading(false)
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white rounded-lg transition-colors text-sm"
+                    >
+                      <FileDown size={14} />
+                    </button>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
+                      导出PDF
                     </div>
                   </div>
                   {hasPrev && (
@@ -669,7 +740,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                       >
                         <ChevronLeft size={14} />
                       </button>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
                         上一个
                       </div>
                     </div>
@@ -682,7 +753,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                       >
                         <ChevronRight size={14} />
                       </button>
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
                         下一个
                       </div>
                     </div>
@@ -691,8 +762,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
 
                 {article?.content && (
                   <div
-                    className="article-content bg-white rounded-lg p-4 border border-gray-100"
+                    className="article-content bg-white rounded-lg p-2 sm:p-4 border border-gray-100"
                     dangerouslySetInnerHTML={{ __html: article.content }}
+                    onClick={handleImageClick}
                   />
                 )}
 
@@ -732,10 +804,15 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                                   <span className="text-xs text-gray-500">{comment.like_count}赞</span>
                                 )}
                               </div>
-                              <div
-                                className="mt-2 text-sm text-gray-600 word-break"
-                                dangerouslySetInnerHTML={{ __html: comment.comment_content }}
-                              />
+                              {comment.comment_content ? (
+                                <div className="mt-2 text-sm text-gray-600 word-break whitespace-pre-wrap">
+                                  {comment.comment_content}
+                                </div>
+                              ) : (
+                                <div className="mt-2 text-sm text-gray-400 word-break">
+                                  暂无内容
+                                </div>
+                              )}
                               {comment.discussion_count > 0 && (
                                 <div className="mt-3">
                                   <button
@@ -745,7 +822,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                                     {expandedDiscussions.has(comment.id) ? '收起' : '展开'} ({comment.discussion_count})
                                   </button>
                                   {expandedDiscussions.has(comment.id) && (
-                                    <div className="mt-3 space-y-3 pl-4 border-l-2 border-purple-200">
+                                    <div className="mt-3 space-y-3 pl-2 sm:pl-4 border-l-2 border-purple-200">
                                       {comment.discussions?.map((discussion: any) => (
                                         <div key={discussion.discussion?.id || discussion.id}>
                                           <div className="flex gap-3">
@@ -770,14 +847,13 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                                                   </span>
                                                 )}
                                               </div>
-                                              <div
-                                                className="text-sm text-gray-600 word-break"
-                                                dangerouslySetInnerHTML={{ __html: discussion.discussion?.discussion_content || '' }}
-                                              />
+                                              <div className="text-sm text-gray-600 word-break whitespace-pre-wrap">
+                                                {discussion.discussion?.discussion_content || ''}
+                                              </div>
                                             </div>
                                           </div>
                                           {discussion.child_discussions?.length > 0 && (
-                                            <div className="mt-3 ml-11 space-y-3">
+                                            <div className="mt-3 ml-6 sm:ml-11 space-y-3">
                                               {discussion.child_discussions.map((child: any) => (
                                                 <div key={child.discussion?.id || child.id} className="flex gap-3">
                                                   <img
@@ -800,10 +876,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                                                         {child.discussion?.ctime ? new Date(child.discussion.ctime * 1000).toLocaleDateString() : ''}
                                                       </span>
                                                     </div>
-                                                    <div
-                                                      className="text-xs text-gray-600 word-break"
-                                                      dangerouslySetInnerHTML={{ __html: child.discussion?.discussion_content || '' }}
-                                                    />
+                                                    <div className="text-xs text-gray-600 word-break whitespace-pre-wrap">
+                                                      {child.discussion?.discussion_content || ''}
+                                                    </div>
                                                   </div>
                                                 </div>
                                               ))}
@@ -865,6 +940,32 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
           </div>
         </div>
       </div>
+
+      {/* 图片预览 */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          onClick={() => setPreviewImage(null)}
+          role="dialog"
+          aria-label="图片预览"
+        >
+          <button
+            onClick={() => setPreviewImage(null)}
+            className="absolute top-4 right-4 z-[201] p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors"
+            aria-label="关闭"
+          >
+            <X size={24} />
+          </button>
+          <img
+            src={previewImage}
+            alt="预览"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+            onError={() => setPreviewImage(null)}
+            draggable={false}
+          />
+        </div>
+      )}
     </div>
   )
 }
