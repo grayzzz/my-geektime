@@ -1,0 +1,14 @@
+services:
+  mysql:
+    image: mysql:latest
+    hostname: "mysql-online"
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=gray@2026
+      - MYSQL_DATABASE=mygeektime
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "3326:3306"
