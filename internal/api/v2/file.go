@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"io"
 	"net/http"
+	"os"
 	"path"
 	"strings"
 
@@ -38,8 +39,7 @@ func (f *File) Proxy(c *gin.Context) {
 			zap.String("contentType", storage.TypeByExtension(uri)),
 		)
 		if fi, stat, err := global.Storage.Get(cacheKey); err != nil {
-			if !strings.Contains(err.Error(), "no such file or directory") &&
-				!strings.Contains(err.Error(), "The system cannot find the file specified") {
+			if !os.IsNotExist(err) {
 				global.LOG.Error("file.proxy.Get", zap.Error(err), zap.String("cacheKey", cacheKey))
 				c.DataFromReader(404, 0, "", nil, nil)
 				return

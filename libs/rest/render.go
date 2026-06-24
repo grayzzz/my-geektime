@@ -25,15 +25,20 @@ func (r *I18nRender) OkWithMsg(c *gin.Context, obj any, msg, other string, param
 }
 
 func (r *I18nRender) FAIL(c *gin.Context, msg string, params ...any) {
-	r.JSON(c, 100, struct{}{}, msg, "FAIL", params...)
+	r.failWithStatus(c, http.StatusBadRequest, 100, msg, "FAIL", params...)
 }
 
 func (r *I18nRender) FailWithMsg(c *gin.Context, msg, other string, params ...any) {
-	r.JSON(c, 100, struct{}{}, msg, other, params...)
+	r.failWithStatus(c, http.StatusBadRequest, 100, msg, other, params...)
 }
 
 func (r *I18nRender) FailWithError(c *gin.Context, err error) {
-	r.JSON(c, 100, struct{}{}, "", err.Error())
+	r.failWithStatus(c, http.StatusInternalServerError, 100, err.Error(), "", err.Error())
+}
+
+func (r *I18nRender) failWithStatus(c *gin.Context, statusCode int, code int, msg, other string, params ...any) {
+	msg = r.I18n.HttpValue(c.Request, msg, other, params...)
+	c.Render(statusCode, render.JSON{Data: gin.H{"status": code, "msg": msg, "data": struct{}{}}})
 }
 
 func (r *I18nRender) JSON(c *gin.Context, code int, obj any, msg, other string, params ...any) {
