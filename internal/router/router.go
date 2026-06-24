@@ -18,6 +18,17 @@ func NewRouter(assets embed.FS) (*gin.Engine, error) {
 
 	e.Use(mw.Cors())
 
+	// 禁用前端静态资源缓存，确保更新后立即生效
+	e.Use(func(c *gin.Context) {
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/assets/") || strings.HasSuffix(path, ".html") {
+			c.Header("Cache-Control", "no-cache, no-store, must-revalidate")
+			c.Header("Pragma", "no-cache")
+			c.Header("Expires", "0")
+		}
+		c.Next()
+	})
+
 	ef, err := static.EmbedFolder(assets, "web")
 	if err != nil {
 		return e, err
@@ -42,8 +53,8 @@ func NewRouter(assets embed.FS) (*gin.Engine, error) {
 			gin.Dir(global.CONF.Storage.Directory, true))
 	}
 
-	public := e.Group("v2", mw.Timeout())
-	private := e.Group("v2", mw.JWTMiddleware(), mw.Timeout())
+	public := e.Group("v2")
+	private := e.Group("v2", mw.JWTMiddleware())
 
 	base(public, private)
 
