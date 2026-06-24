@@ -91,6 +91,27 @@ body {
 .article-content {
   line-height: 1.8;
   color: #374151;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  overflow-x: hidden;
+  max-width: 100%;
+}
+
+/* 限制文章内部元素的宽度，防止极客时间 HTML 内联样式导致溢出 */
+.article-content > div,
+.article-content > section,
+.article-content > article,
+.article-content > main,
+.article-content > p,
+.article-content > h1,
+.article-content > h2,
+.article-content > h3,
+.article-content > h4,
+.article-content > h5,
+.article-content > h6,
+.article-content > pre,
+.article-content > table {
+  max-width: 100% !important;
 }
 
 .article-content h1,
@@ -106,23 +127,23 @@ body {
 }
 
 .article-content h1 {
-  font-size: 1.75rem;
+  font-size: 1.25rem;
   border-bottom: 2px solid #e5e7eb;
   padding-bottom: 0.5rem;
 }
 
 .article-content h2 {
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   border-bottom: 1px solid #e5e7eb;
   padding-bottom: 0.25rem;
 }
 
 .article-content h3 {
-  font-size: 1.25rem;
+  font-size: 1rem;
 }
 
 .article-content h4 {
-  font-size: 1.125rem;
+  font-size: 0.9375rem;
 }
 
 .article-content p {
@@ -184,6 +205,12 @@ body {
   max-width: 100%;
   border-radius: 0.5rem;
   margin: 1em 0;
+  cursor: zoom-in;
+  transition: opacity 0.2s;
+}
+
+.article-content img:hover {
+  opacity: 0.85;
 }
 
 .article-content table {

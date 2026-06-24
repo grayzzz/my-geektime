@@ -51,7 +51,7 @@ export function Table<T extends Record<string, any>>({
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={clsx('px-6 py-4 whitespace-nowrap', column.className)}
+                  className={clsx('px-4 py-3 sm:px-6 sm:py-4 whitespace-normal sm:whitespace-nowrap break-words', column.className)}
                 >
                   {column.render ? column.render(item) : item[column.key]}
                 </td>

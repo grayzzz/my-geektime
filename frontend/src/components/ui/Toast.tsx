@@ -12,7 +12,7 @@ export interface Toast {
 
 interface ToastContextType {
   toasts: Toast[]
-  addToast: (message: string, type?: Toast['type'], duration?: number) => void
+  addToast: (message: string, type?: Toast['type'], duration?: number) => string
   removeToast: (id: string) => void
 }
 
@@ -43,6 +43,8 @@ const ToastItem: React.FC<{ toast: Toast; onRemove: () => void }> = ({ toast, on
   const Icon = icons[toast.type]
 
   React.useEffect(() => {
+    // duration 为 Infinity 时表示永不自动消失（如 loading 提示）
+    if (toast.duration === Infinity) return
     const timer = setTimeout(() => {
       onRemove()
     }, toast.duration || 3000)
@@ -75,6 +77,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addToast = useCallback((message: string, type: Toast['type'] = 'info', duration = 3000) => {
     const id = Math.random().toString(36).substring(2, 9)
     setToasts((prev) => [...prev, { id, message, type, duration }])
+    return id
   }, [])
 
   const removeToast = useCallback((id: string) => {

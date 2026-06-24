@@ -244,13 +244,13 @@ export const LessonDrawer: React.FC<LessonDrawerProps> = ({
                 value={lessonFilters.keywords}
                 onChange={(e) => setLessonFilters({ ...lessonFilters, keywords: e.target.value })}
                 onKeyDown={(e) => e.key === 'Enter' && handleLessonFilter()}
-                className="w-48"
+                className="w-36 sm:w-48"
               />
               <Select
                 options={productStatusOptions}
                 value={lessonFilters.xstatus}
                 onChange={(e) => setLessonFilters({ ...lessonFilters, xstatus: Number(e.target.value) })}
-                className="w-36"
+                className="w-28 sm:w-36"
               />
               <Button size="sm" onClick={handleLessonFilter}>
                 搜索

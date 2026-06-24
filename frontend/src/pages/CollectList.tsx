@@ -404,7 +404,7 @@ export const CollectList: React.FC = () => {
                         </div>
                       )}
                     </div>
-                    <div className="mt-3 flex items-center gap-2">
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
                       {item.item.redirect && (
                         <div className="relative group">
                           <Button
@@ -415,7 +415,7 @@ export const CollectList: React.FC = () => {
                           >
                             <ExternalLink size={14} />
                           </Button>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                             源站
                           </div>
                         </div>
@@ -429,7 +429,7 @@ export const CollectList: React.FC = () => {
                         >
                           <BookOpen size={14} />
                         </Button>
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                           课程
                         </div>
                       </div>
@@ -442,7 +442,7 @@ export const CollectList: React.FC = () => {
                         >
                           <FileText size={14} />
                         </Button>
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                           导出Markdown
                         </div>
                       </div>
@@ -456,7 +456,7 @@ export const CollectList: React.FC = () => {
                           >
                             <FileText size={14} />
                           </Button>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                             文档
                           </div>
                         </div>
@@ -470,7 +470,7 @@ export const CollectList: React.FC = () => {
                           >
                             <FileText size={14} />
                           </Button>
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                             生成文档
                           </div>
                         </div>
@@ -486,7 +486,7 @@ export const CollectList: React.FC = () => {
                             >
                               <RefreshCw size={14} />
                             </Button>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                               下载资源
                             </div>
                           </div>
@@ -499,7 +499,7 @@ export const CollectList: React.FC = () => {
                             >
                               <Trash2 size={14} />
                             </Button>
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-20">
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                               删除
                             </div>
                           </div>

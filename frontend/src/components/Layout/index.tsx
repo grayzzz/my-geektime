@@ -26,7 +26,7 @@ export const Layout: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-primary-50 via-primary-100 to-primary-50 relative overflow-hidden">
+    <div className="flex h-[100dvh] bg-gradient-to-br from-primary-50 via-primary-100 to-primary-50 relative overflow-hidden">
       <Bubble className="w-72 h-72 -top-36 -left-36 animate-pulse" />
       <Bubble className="w-48 h-48 top-1/3 -right-24 animate-bounce" style={{ animationDuration: '4s' }} />
       <Bubble className="w-64 h-64 -bottom-32 left-1/4 animate-pulse" style={{ animationDuration: '5s' }} />
@@ -38,7 +38,7 @@ export const Layout: React.FC = () => {
         onToggleMenu={toggleMenu}
       />
 
-      <div className="flex flex-col h-screen w-full">
+      <div className="flex flex-col h-[100dvh] w-full">
         <Sidebar />
         <div className="flex-1 flex flex-col overflow-hidden">
           <Header onMenuClick={() => setDrawerOpen(true)} />

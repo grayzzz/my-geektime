@@ -61,7 +61,7 @@ export const Drawer: React.FC<DrawerProps> = ({
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto h-[calc(100vh-73px)] p-6">
+        <div className="overflow-y-auto h-[calc(100dvh-73px)] p-4 sm:p-6">
           {children}
         </div>
       </div>

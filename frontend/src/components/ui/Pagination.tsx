@@ -54,8 +54,8 @@ export const Pagination: React.FC<PaginationProps> = ({
   }
 
   return (
-    <div className="flex items-center justify-between px-4 py-3 bg-white border-t">
-      <div className="flex items-center gap-2">
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-4 py-3 bg-white border-t">
+      <div className="flex items-center gap-2 shrink-0">
         <span className="text-sm text-gray-600">共 {total} 条</span>
         {onPageSizeChange && (
           <select
@@ -71,17 +71,17 @@ export const Pagination: React.FC<PaginationProps> = ({
           </select>
         )}
       </div>
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 overflow-x-auto max-w-full">
         <button
           onClick={() => onChange(current - 1)}
           disabled={current === 1}
-          className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
         >
           <ChevronLeft size={20} />
         </button>
         {getPageNumbers().map((page, index) =>
           page === '...' ? (
-            <span key={index} className="px-3 py-2">
+            <span key={index} className="px-3 py-2 flex-shrink-0">
               ...
             </span>
           ) : (
@@ -89,7 +89,7 @@ export const Pagination: React.FC<PaginationProps> = ({
               key={index}
               onClick={() => onChange(page as number)}
               className={clsx(
-                'px-3 py-2 rounded min-w-[40px]',
+                'px-2 py-1 sm:px-3 py-2 rounded min-w-[32px] sm:min-w-[40px] text-xs sm:text-sm flex-shrink-0',
                 current === page
                   ? 'bg-primary-500 text-white hover:bg-primary-600'
                   : 'hover:bg-gray-100'
@@ -102,7 +102,7 @@ export const Pagination: React.FC<PaginationProps> = ({
         <button
           onClick={() => onChange(current + 1)}
           disabled={current === totalPages}
-          className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="p-2 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
         >
           <ChevronRight size={20} />
         </button>

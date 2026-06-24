@@ -170,8 +170,8 @@ export const GlobalSettings: React.FC = () => {
 
       {/* 设置面板 */}
       {isOpen && (
-        <div 
-          className="fixed z-50 w-72 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 overflow-hidden"
+        <div
+          className="fixed z-50 w-72 sm:w-72 max-w-[calc(100vw-48px)] bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 overflow-hidden"
           style={{
             right: '24px',
             top: '50%',
