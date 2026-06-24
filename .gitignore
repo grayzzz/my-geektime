@@ -59,4 +59,4 @@ credentials.json
 .ssh/
 
 # docker中mysql的数据
-.docker/mysql/data/**
+.docker/mysql/data/**.claude/settings.local.json
