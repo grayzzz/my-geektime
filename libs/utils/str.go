@@ -2,6 +2,7 @@ package utils
 
 import (
 	"fmt"
+	"html"
 	"math"
 	"math/rand"
 	"strconv"
@@ -84,4 +85,11 @@ func ReverseByte(a []byte) {
 	for left, right := 0, len(a)-1; left < right; left, right = left+1, right-1 {
 		a[left], a[right] = a[right], a[left]
 	}
+}
+
+// UnescapeComment 对评论内容中的 HTML 实体进行解码
+// 极客时间 API 返回的 comment_content 等字段中，特殊字符会被编码为 HTML 实体
+// 如 &gt; → >, &#47; → /, &quot; → ", &#39; → ', &amp; → &
+func UnescapeComment(text string) string {
+	return html.UnescapeString(text)
 }
