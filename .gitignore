@@ -60,3 +60,6 @@ credentials.json
 
 # docker中mysql的数据
 docker/mysql/data/**
+
+# 日志
+*.log
