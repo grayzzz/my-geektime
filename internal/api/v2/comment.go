@@ -8,6 +8,7 @@ import (
 	"github.com/zkep/my-geektime/internal/model"
 	"github.com/zkep/my-geektime/internal/service"
 	"github.com/zkep/my-geektime/internal/types/geek"
+	"github.com/zkep/my-geektime/libs/utils"
 )
 
 func (p *Product) ArticleComments(c *gin.Context) {
@@ -62,6 +63,10 @@ func (t *Task) ArticleComments(c *gin.Context) {
 		if err := json.Unmarshal(v.Raw, &row); err != nil {
 			global.FAIL(c, "fail.msg", err.Error())
 			return
+		}
+		row.CommentContent = utils.UnescapeComment(row.CommentContent)
+		for ri := range row.Replies {
+			row.Replies[ri].Content = utils.UnescapeComment(row.Replies[ri].Content)
 		}
 		ret.Rows = append(ret.Rows, row)
 	}

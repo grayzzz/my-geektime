@@ -23,6 +23,7 @@ import (
 	"github.com/zkep/my-geektime/internal/global"
 	"github.com/zkep/my-geektime/internal/model"
 	"github.com/zkep/my-geektime/internal/types/geek"
+	"github.com/zkep/my-geektime/libs/utils"
 	"go.uber.org/zap"
 )
 
@@ -119,7 +120,7 @@ func fetchArticleComments(ctx context.Context, aidStr string) ([]PDFComment, err
 			UserName:        row.UserName,
 			LikeCount:       row.LikeCount,
 			DiscussionCount: row.DiscussionCount,
-			Content:         row.CommentContent,
+			Content:         utils.UnescapeComment(row.CommentContent),
 			Time:            time.Unix(row.CommentCtime, 0).Format("2006-01-02"),
 		}
 
@@ -160,7 +161,7 @@ func fetchDiscussions(ctx context.Context, cid int64) ([]PDFDiscussion, error) {
 		pd := PDFDiscussion{
 			Avatar:      URLProxyReplace(row.Author.Avatar),
 			Nickname:    row.Author.Nickname,
-			Content:     row.Discussion.DiscussionContent,
+			Content:     utils.UnescapeComment(row.Discussion.DiscussionContent),
 			Time:        time.Unix(row.Discussion.Ctime, 0).Format("2006-01-02"),
 			LikesNumber: row.Discussion.LikesNumber,
 		}
@@ -174,7 +175,7 @@ func fetchDiscussions(ctx context.Context, cid int64) ([]PDFDiscussion, error) {
 			for _, child := range row.ChildDiscussions {
 				pcd := PDFChildDiscussion{
 					AuthorNickname: child.Author.Nickname,
-					Content:        child.Discussion.DiscussionContent,
+					Content:        utils.UnescapeComment(child.Discussion.DiscussionContent),
 				}
 				if child.ReplyAuthor.Nickname != "" {
 					pcd.ReplyNickname = child.ReplyAuthor.Nickname

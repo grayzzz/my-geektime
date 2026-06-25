@@ -23,6 +23,7 @@ import (
 	"github.com/zkep/my-geektime/internal/global"
 	"github.com/zkep/my-geektime/internal/model"
 	"github.com/zkep/my-geektime/internal/types/geek"
+	"github.com/zkep/my-geektime/libs/utils"
 	"go.uber.org/zap"
 )
 
@@ -755,6 +756,7 @@ func (g *GoldmarkDocGenerator) getCommentsHTML(_ context.Context, aid int64, com
 				continue
 			}
 			row.UserHeader = URLProxyReplace(row.UserHeader)
+			row.CommentContent = utils.UnescapeComment(row.CommentContent)
 
 			format := commentSimpleHtmlFormat
 			if row.UserHeader != "" {
