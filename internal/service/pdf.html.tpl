@@ -174,9 +174,6 @@
 </head>
 <body>
   <div class="article-title">{{.Title}}</div>
-  {{if .Summary}}
-  <div class="article-summary">{{.Summary}}</div>
-  {{end}}
   <div class="article-content">{{.Content}}</div>
 
   {{if .Comments}}

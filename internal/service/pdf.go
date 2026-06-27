@@ -59,7 +59,6 @@ type PDFChildDiscussion struct {
 // PDFData PDF 生成数据
 type PDFData struct {
 	Title    string
-	Summary  string
 	Content  template.HTML
 	Comments []PDFComment
 }
@@ -450,7 +449,6 @@ func generateSinglePDF(ctx context.Context, taskId, fallbackTitle, otherId strin
 
 	data := PDFData{
 		Title:    title,
-		Summary:  articleData.Info.Cshort,
 		Content:  template.HTML(processedContent),
 		Comments: comments,
 	}
