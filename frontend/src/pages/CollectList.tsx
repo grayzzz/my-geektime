@@ -5,7 +5,8 @@ import {
   CollectItem,
 } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
-import { retryTask, exportTask } from '@/api/task'
+import { retryTask, exportTask, downloadPdfBlob } from '@/api/task'
+import { downloadFileFromBlob } from '@/utils/request'
 import { Button, Card, Spinner, Alert, Modal } from '@/components/ui'
 import { LessonDrawer } from '@/components/LessonDrawer'
 import { useAuthStore } from '@/store/auth'
@@ -13,6 +14,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useLessonList } from '@/hooks/useLessonList'
 import {
   FileText,
+  FileDown,
   ExternalLink,
   Trash2,
   RefreshCw,
@@ -50,7 +52,7 @@ export const CollectList: React.FC = () => {
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLElement | null>(null)
-  const { addToast } = useToast()
+  const { addToast, removeToast } = useToast()
 
   const {
     lessonList,
@@ -125,6 +127,8 @@ export const CollectList: React.FC = () => {
       return () => mainElement.removeEventListener('scroll', handleScroll)
     }
   }, [])
+
+  const [pdfDownloading, setPdfDownloading] = useState(false)
 
   const scrollToTop = () => {
     if (scrollContainerRef.current) {
@@ -238,10 +242,10 @@ export const CollectList: React.FC = () => {
         addToast('文档生成成功', 'success')
         // 更新本地状态而不是重新加载整个列表
         if (response && response.doc) {
-          setItems(prevItems => 
-            prevItems.map(item => 
-              item.item.task_id === taskId 
-                ? { ...item, item: { ...item.item, doc: response.doc } } 
+          setItems(prevItems =>
+            prevItems.map(item =>
+              item.item.task_id === taskId
+                ? { ...item, item: { ...item.item, doc: response.doc } }
                 : item
             )
           )
@@ -251,6 +255,36 @@ export const CollectList: React.FC = () => {
       console.error('Failed to export', error)
       addToast('操作失败', 'error')
     }
+  }
+
+  const handleExportPdf = (taskId: string, taskName: string) => {
+    if (pdfDownloading) return
+    setPdfDownloading(true)
+    const sanitize = (name: string) =>
+      name
+        .replace(/"/g, '-')
+        .replace(/\|/g, '-')
+        .replace(/｜/g, '-')
+        .replace(/:/g, '：')
+        .replace(/”/g, '“')
+        .replace(/\?/g, '？')
+        .replace(/&/g, '+')
+        .replace(/\t/g, '')
+        .replace(/ /g, '')
+        .trim()
+    const safeName = sanitize(taskName) || taskId
+    const loadingId = addToast('正在生成PDF，请稍候...', 'info', Infinity)
+    downloadPdfBlob({ pid: taskId })
+      .then((blob) => {
+        downloadFileFromBlob(blob, `${safeName}.pdf`)
+        removeToast(loadingId)
+        addToast('PDF导出成功', 'success')
+      })
+      .catch((error) => {
+        removeToast(loadingId)
+        addToast(error?.message || 'PDF导出失败', 'error')
+      })
+      .finally(() => setPdfDownloading(false))
   }
 
   const getStatusText = (status: number) => {
@@ -431,6 +465,20 @@ export const CollectList: React.FC = () => {
                         </Button>
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                           课程
+                        </div>
+                      </div>
+                      <div className="relative group">
+                        <Button
+                          variant="light"
+                          size="sm"
+                          disabled={pdfDownloading}
+                          onClick={() => handleExportPdf(item.item.task_id, item.item.task_name)}
+                          className="!p-2"
+                        >
+                          <FileDown size={14} />
+                        </Button>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
+                          导出课程PDF
                         </div>
                       </div>
                       <div className="relative group">
