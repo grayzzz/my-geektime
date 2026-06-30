@@ -119,6 +119,7 @@
     color: #4b5563;
     margin-bottom: 0.5rem;
     line-height: 1.6;
+    white-space: pre-wrap;
   }
   .comment-footer {
     font-size: 12px;
@@ -148,6 +149,7 @@
     color: #4b5563;
     margin-top: 0.25rem;
     line-height: 1.6;
+    white-space: pre-wrap;
   }
   .child-discussions {
     margin-left: 1.5rem;
@@ -169,6 +171,7 @@
   .child-discussion .child-content {
     color: #6b7280;
     margin-top: 0.125rem;
+    white-space: pre-wrap;
   }
 </style>
 </head>
