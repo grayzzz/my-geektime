@@ -797,6 +797,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium text-gray-800">{comment.user_name}</span>
+                                {comment.comment_ctime ? (
+                                  <span className="text-xs text-gray-500">{new Date(comment.comment_ctime * 1000).toLocaleDateString()}</span>
+                                ) : ''}
                                 {comment.discussion_count > 0 && (
                                   <span className="text-xs text-gray-500">{comment.discussion_count}讨论</span>
                                 )}
