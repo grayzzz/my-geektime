@@ -415,6 +415,14 @@ export const TaskList: React.FC = () => {
       setCollectCategoryValue(0)
       setCollectIds([])
       setSelectedItems(new Set())
+      // 更新本地状态，标记已收藏
+      setItems(prevItems =>
+        prevItems.map(item =>
+          collectIds.includes(item.task_id)
+            ? { ...item, is_collected: true }
+            : item
+        )
+      )
     } catch (error) {
       console.error('Failed to collect tasks', error)
     }
@@ -603,6 +611,7 @@ export const TaskList: React.FC = () => {
                   onDelete={handleDelete}
                   onCollect={handleSingleCollect}
                   isExporting={pdfDownloading}
+                  isCollected={item.is_collected}
                 />
               ))}
             </div>

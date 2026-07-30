@@ -23,6 +23,7 @@ import (
 	"github.com/zkep/my-geektime/internal/global"
 	"github.com/zkep/my-geektime/internal/model"
 	"github.com/zkep/my-geektime/internal/service"
+	"github.com/zkep/my-geektime/internal/types/collect"
 	"github.com/zkep/my-geektime/internal/types/geek"
 	"github.com/zkep/my-geektime/internal/types/sys_dict"
 	"github.com/zkep/my-geektime/internal/types/task"
@@ -44,6 +45,7 @@ func (t *Task) List(c *gin.Context) {
 		global.FAIL(c, "fail.msg", err.Error())
 		return
 	}
+	identity := c.GetString(global.Identity)
 	if req.PerPage <= 0 || (req.PerPage > 200) {
 		req.PerPage = 10
 	}
@@ -86,6 +88,18 @@ func (t *Task) List(c *gin.Context) {
 		Find(&ls).Error; err != nil {
 		global.FAIL(c, "fail.msg", err.Error())
 		return
+	}
+	// 批量查询当前页课程的收藏状态，避免 N+1
+	taskIds := make([]string, len(ls))
+	for i, l := range ls {
+		taskIds[i] = l.TaskId
+	}
+	var collects []model.Collect
+	global.DB.Where("uid = ? AND collect_id IN ? AND collect_type = ? AND deleted_at = ?",
+		identity, taskIds, collect.CollectTask, 0).Find(&collects)
+	collectedMap := make(map[string]bool)
+	for _, c := range collects {
+		collectedMap[c.CollectId] = true
 	}
 
 	for _, l := range ls {
@@ -153,6 +167,9 @@ func (t *Task) List(c *gin.Context) {
 			}
 			row.Redirect = sys_dict.ProductDetailURLWithType(
 				articleData.Product.Type, articleData.Info.Pid, articleData.Info.ID)
+		}
+		if collectedMap[l.TaskId] {
+			row.IsCollected = true
 		}
 		row.Cover = service.URLProxyReplace(row.Cover)
 		row.Author.Avatar = service.URLProxyReplace(row.Author.Avatar)

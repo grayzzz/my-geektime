@@ -70,6 +70,8 @@ type Task struct {
 	Article geek.ProductArticle `json:"article,omitempty"`
 	// redirect
 	Redirect string `json:"redirect,omitempty"`
+	// is collected
+	IsCollected bool `json:"is_collected,omitempty"`
 }
 
 type TaskStatistics struct {

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui'
 import { TaskItem } from '@/api/task'
 import { Trash2, List, Download, Book, Sparkles, ExternalLink, Heart, FileText, FileDown } from 'lucide-react'
@@ -16,6 +16,7 @@ interface TaskCardProps {
   onDelete: (ids: string[]) => void
   onCollect: (id: string) => void
   isExporting?: boolean
+  isCollected?: boolean
 }
 
 const productTypeOptions = [
@@ -57,7 +58,21 @@ export const TaskCard: React.FC<TaskCardProps> = ({
   onDelete,
   onCollect,
   isExporting,
+  isCollected,
 }) => {
+  const prevCollectedRef = useRef(isCollected)
+  const [heartAnimating, setHeartAnimating] = useState(false)
+
+  // 依赖 [isCollected]：需要在每次状态变化时检测 false→true 过渡以触发动画
+  useEffect(() => {
+    if (isCollected && !prevCollectedRef.current) {
+      setHeartAnimating(true)
+      const timer = setTimeout(() => setHeartAnimating(false), 400)
+      return () => clearTimeout(timer)
+    }
+    prevCollectedRef.current = isCollected
+  }, [isCollected])
+
   const getDirectionText = (group: number) => {
     const dirItem = geektimeDirection.find((o: any) => Number(o.value) === group)
     return dirItem?.label || '-'
@@ -285,18 +300,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             )}
             <div className="relative group">
               <Button
-                variant="light"
+                variant={isCollected ? "light" : "light"}
                 size="sm"
+                disabled={isCollected}
                 onClick={(e) => {
                   e.stopPropagation()
                   onCollect(item.task_id)
                 }}
-                className="!p-2"
+                className={`!p-2 transition-all duration-200 ${heartAnimating ? 'heart-pop' : ''} ${isCollected
+                  ? '!bg-rose-100 !text-rose-700 !border-rose-300 hover:!border-rose-400 hover:!bg-rose-200'
+                  : '!text-gray-400 !border-gray-200 hover:!border-purple-300 hover:!text-rose-400'
+                }`}
               >
-                <Heart size={14} />
+                <Heart size={14} fill={isCollected ? "currentColor" : "none"} />
               </Button>
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
-                收藏
+                {isCollected ? '已收藏' : '收藏'}
               </div>
             </div>
           </div>

@@ -37,6 +37,7 @@ export interface TaskItem {
   doc?: string
   redirect?: string
   dir?: string
+  is_collected?: boolean
 }
 
 export const getTaskList = (params?: TaskListParams) => {
