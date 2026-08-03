@@ -22,12 +22,12 @@ func Timeout() gin.HandlerFunc {
 	}
 }
 
-// PDFTimeout 针对 PDF 导出的长超时中间件（5 分钟）
+// PDFTimeout 针对 PDF 导出的长超时中间件（20 分钟）
 // 使用 http.TimeoutHandler 而非 gin-contrib/timeout，避免覆盖已完成的响应
 func PDFTimeout() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		http.TimeoutHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			c.Next()
-		}), 5*time.Minute, "").ServeHTTP(c.Writer, c.Request)
+		}), 20*time.Minute, "").ServeHTTP(c.Writer, c.Request)
 	}
 }
