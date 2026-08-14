@@ -10,6 +10,7 @@ import {
 import { downloadFileFromBlob } from '@/utils/request'
 import { createCollect } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
+import { getCourseProgressCached } from '@/api/progress'
 import { Button, Card, Select, Input, Spinner, Modal } from '@/components/ui'
 import { TaskCard } from '@/components/TaskCard'
 import { LessonDrawer } from '@/components/LessonDrawer'
@@ -189,6 +190,50 @@ export const TaskList: React.FC = () => {
     }
   }
 
+  // 为所有课程级项拉取学习进度，并入 items。
+  // 课程级 task_pid 为空时会被后端 omitempty 省略，因此使用 !item.task_pid 判断。
+  const attachCourseProgress = async (rows: TaskItem[]): Promise<TaskItem[]> => {
+    const courseRows = rows.filter((item) => !item.task_pid)
+    if (courseRows.length === 0) return rows
+    try {
+      const progressResults = await Promise.all(
+        courseRows.map(async (item) => {
+          try {
+            const courseProgress = await getCourseProgressCached(item.task_id)
+            return {
+              task_id: item.task_id,
+              course_progress: {
+                ...courseProgress,
+                total_count: courseProgress.total_count || item.article?.count || 0,
+              },
+            }
+          } catch (error) {
+            // 后端暂时不可用时仍保留章节总数，卡片可以显示 0/总章节数。
+            return {
+              task_id: item.task_id,
+              course_progress: {
+                finished_count: 0,
+                total_count: item.article?.count || 0,
+                percent: 0,
+                last_task_id: '',
+                last_task_name: '',
+                updated_at: 0,
+              },
+            }
+          }
+        })
+      )
+      const progressMap = new Map(progressResults.map((p) => [p.task_id, p.course_progress]))
+      return rows.map((item) => {
+        const p = progressMap.get(item.task_id)
+        return p ? { ...item, course_progress: p } : item
+      })
+    } catch (error) {
+      console.error('Failed to load course progress', error)
+      return rows
+    }
+  }
+
   const loadData = async (loadPage = 1, isLoadMore = false) => {
     if (isLoadMore) {
       setLoadMoreLoading(true)
@@ -205,14 +250,16 @@ export const TaskList: React.FC = () => {
       if (filters.keywords) params.keywords = filters.keywords
 
       const res = await getTaskList(params)
+      // 批量拉取课程级进度（仅课程级、已缓存项）
+      const rowsWithProgress = await attachCourseProgress(res.rows || [])
       if (isLoadMore) {
-        setItems((prev) => [...prev, ...(res.rows || [])])
+        setItems((prev) => [...prev, ...rowsWithProgress])
       } else {
-        setItems(res.rows || [])
+        setItems(rowsWithProgress)
       }
       setTotal(res.count || 0)
       setPage(loadPage)
-      const newItems = isLoadMore ? [...items, ...(res.rows || [])] : (res.rows || [])
+      const newItems = isLoadMore ? [...items, ...rowsWithProgress] : rowsWithProgress
       setHasMore(newItems.length < (res.count || 0))
     } catch (error) {
       console.error('Failed to load tasks', error)
@@ -750,7 +797,13 @@ export const TaskList: React.FC = () => {
         lessonPage={lessonPage}
         lessonFilters={lessonFilters}
         setLessonFilters={setLessonFilters}
-        setShowLessonDrawer={setShowLessonDrawer}
+        setShowLessonDrawer={(show: boolean) => {
+          setShowLessonDrawer(show)
+          // 关闭课程抽屉后刷新列表课程进度
+          if (!show) {
+            loadData(1, false)
+          }
+        }}
         handleLessonPageChange={handleLessonPageChange}
         handleLessonFilter={handleLessonFilter}
       />

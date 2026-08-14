@@ -176,6 +176,44 @@ export const TaskCard: React.FC<TaskCardProps> = ({
             </div>
           )}
         </div>
+        {/* 学习进度 */}
+        {item.course_progress && item.course_progress.total_count > 0 && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between mb-1.5">
+              <span className="text-xs text-gray-400">学习进度:</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-600">
+                  {item.course_progress.finished_count}/{item.course_progress.total_count} 讲
+                </span>
+                <span className={`text-xs font-semibold ${item.course_progress.percent >= 100 ? 'text-green-600' : 'text-primary-600'}`}>
+                  {item.course_progress.percent >= 100
+                    ? '100%'
+                    : `${(Math.round(item.course_progress.percent * 10) / 10)}%`}
+                </span>
+                {item.course_progress.percent >= 100 && (
+                  <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded">已学完</span>
+                )}
+              </div>
+            </div>
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${item.course_progress.percent >= 100 ? 'bg-green-500' : 'bg-primary-500'}`}
+                style={{ width: `${Math.min(100, Math.max(0, item.course_progress.percent))}%` }}
+              />
+            </div>
+            {item.course_progress.last_task_name ? (
+              <p className="text-xs truncate mt-1.5" title={item.course_progress.last_task_name}>
+                <span className="text-gray-400">上次学到:</span>{' '}
+                <span className="text-gray-600">{item.course_progress.last_task_name}</span>
+              </p>
+            ) : (
+              <p className="text-xs mt-1.5">
+                <span className="text-gray-400">上次学到:</span>{' '}
+                <span className="text-gray-600">尚未开始</span>
+              </p>
+            )}
+          </div>
+        )}
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <div className="relative group">
@@ -307,12 +345,18 @@ export const TaskCard: React.FC<TaskCardProps> = ({
                   e.stopPropagation()
                   onCollect(item.task_id)
                 }}
+                aria-label={isCollected ? '已收藏' : '收藏'}
+                title={isCollected ? '已收藏' : '收藏'}
                 className={`!p-2 transition-all duration-200 ${heartAnimating ? 'heart-pop' : ''} ${isCollected
-                  ? '!bg-rose-100 !text-rose-700 !border-rose-300 hover:!border-rose-400 hover:!bg-rose-200'
-                  : '!text-gray-400 !border-gray-200 hover:!border-purple-300 hover:!text-rose-400'
+                  ? '!bg-rose-50 !text-rose-600 !border-rose-200 hover:!bg-rose-100 hover:!border-rose-300'
+                  : 'hover:-translate-y-0.5 hover:shadow-sm hover:!border-gray-300'
                 }`}
               >
-                <Heart size={14} fill={isCollected ? "currentColor" : "none"} />
+                <Heart
+                  size={14}
+                  fill={isCollected ? "currentColor" : "none"}
+                  className="transition-transform duration-200 group-hover:scale-110"
+                />
               </Button>
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 {isCollected ? '已收藏' : '收藏'}

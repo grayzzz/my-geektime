@@ -6,6 +6,7 @@ import {
 } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
 import { retryTask, exportTask, downloadPdfBlob } from '@/api/task'
+import { getCourseProgressCached } from '@/api/progress'
 import { downloadFileFromBlob } from '@/utils/request'
 import { Button, Card, Spinner, Alert, Modal } from '@/components/ui'
 import { LessonDrawer } from '@/components/LessonDrawer'
@@ -148,6 +149,48 @@ export const CollectList: React.FC = () => {
     }
   }
 
+  // 为收藏的课程项拉取学习进度，并入 items
+  const attachCourseProgress = async (rows: CollectItem[]): Promise<CollectItem[]> => {
+    if (rows.length === 0) return rows
+    try {
+      const progressResults = await Promise.all(
+        rows.map(async (item) => {
+          try {
+            const courseProgress = await getCourseProgressCached(item.item.task_id)
+            return {
+              task_id: item.item.task_id,
+              course_progress: {
+                ...courseProgress,
+                total_count: courseProgress.total_count || item.item.article?.count || 0,
+              },
+            }
+          } catch (error) {
+            // 后端暂时不可用时仍保留章节总数，卡片可以显示 0/总章节数
+            return {
+              task_id: item.item.task_id,
+              course_progress: {
+                finished_count: 0,
+                total_count: item.item.article?.count || 0,
+                percent: 0,
+                last_task_id: '',
+                last_task_name: '',
+                updated_at: 0,
+              },
+            }
+          }
+        })
+      )
+      const progressMap = new Map(progressResults.map((p) => [p.task_id, p.course_progress]))
+      return rows.map((item) => {
+        const p = progressMap.get(item.item.task_id)
+        return p ? { ...item, item: { ...item.item, course_progress: p } } : item
+      })
+    } catch (error) {
+      console.error('Failed to load course progress', error)
+      return rows
+    }
+  }
+
   const loadData = async (loadPage = 1, isLoadMore = false) => {
     if (isLoadMore) {
       setLoadMoreLoading(true)
@@ -159,14 +202,15 @@ export const CollectList: React.FC = () => {
       if (category) params.category = category
 
       const res = await getCollectList(params)
+      const rowsWithProgress = await attachCourseProgress(res.rows || [])
       if (isLoadMore) {
-        setItems((prev) => [...prev, ...(res.rows || [])])
+        setItems((prev) => [...prev, ...rowsWithProgress])
       } else {
-        setItems(res.rows || [])
+        setItems(rowsWithProgress)
       }
       setTotal(res.count || 0)
       setPage(loadPage)
-      const newItems = isLoadMore ? [...items, ...(res.rows || [])] : (res.rows || [])
+      const newItems = isLoadMore ? [...items, ...rowsWithProgress] : rowsWithProgress
       setHasMore(newItems.length < (res.count || 0))
     } catch (error) {
       console.error('Failed to load collects', error)
@@ -438,6 +482,44 @@ export const CollectList: React.FC = () => {
                         </div>
                       )}
                     </div>
+                    {/* 学习进度 */}
+                    {item.item.course_progress && item.item.course_progress.total_count > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-xs text-gray-400">学习进度:</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-600">
+                              {item.item.course_progress.finished_count}/{item.item.course_progress.total_count} 讲
+                            </span>
+                            <span className={`text-xs font-semibold ${item.item.course_progress.percent >= 100 ? 'text-green-600' : 'text-primary-600'}`}>
+                              {item.item.course_progress.percent >= 100
+                                ? '100%'
+                                : `${(Math.round(item.item.course_progress.percent * 10) / 10)}%`}
+                            </span>
+                            {item.item.course_progress.percent >= 100 && (
+                              <span className="px-1.5 py-0.5 bg-green-100 text-green-600 text-xs rounded">已学完</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${item.item.course_progress.percent >= 100 ? 'bg-green-500' : 'bg-primary-500'}`}
+                            style={{ width: `${Math.min(100, Math.max(0, item.item.course_progress.percent))}%` }}
+                          />
+                        </div>
+                        {item.item.course_progress.last_task_name ? (
+                          <p className="text-xs truncate mt-1.5" title={item.item.course_progress.last_task_name}>
+                            <span className="text-gray-400">上次学到:</span>{' '}
+                            <span className="text-gray-600">{item.item.course_progress.last_task_name}</span>
+                          </p>
+                        ) : (
+                          <p className="text-xs mt-1.5">
+                            <span className="text-gray-400">上次学到:</span>{' '}
+                            <span className="text-gray-600">尚未开始</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                       {item.item.redirect && (
                         <div className="relative group">
@@ -656,7 +738,13 @@ export const CollectList: React.FC = () => {
         lessonPage={lessonPage}
         lessonFilters={lessonFilters}
         setLessonFilters={setLessonFilters}
-        setShowLessonDrawer={setShowLessonDrawer}
+        setShowLessonDrawer={(show: boolean) => {
+          setShowLessonDrawer(show)
+          // 关闭课程抽屉后刷新收藏列表的课程进度
+          if (!show) {
+            loadData(1, false)
+          }
+        }}
         handleLessonPageChange={handleLessonPageChange}
         handleLessonFilter={handleLessonFilter}
       />

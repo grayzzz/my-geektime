@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { Button, Input, Select, Spinner, Drawer, Pagination } from '@/components/ui'
 import { TaskItem, TaskInfo, getTaskInfo } from '@/api/task'
+import { getMyProgress, type ProgressItem } from '@/api/progress'
 import { ExternalLink } from 'lucide-react'
 import { LessonDetail } from './LessonDetail'
 
@@ -59,24 +60,53 @@ export const LessonDrawer: React.FC<LessonDrawerProps> = ({
   const [currentLessonGlobalIndex, setCurrentLessonGlobalIndex] = useState(0)
   const [taskInfo, setTaskInfo] = useState<TaskInfo | null>(null)
   const [loadingInfo, setLoadingInfo] = useState(false)
+  // 章节学习进度映射 task_id → { is_finished, has_progress }
+  const [lessonProgressMap, setLessonProgressMap] = useState<Record<string, { is_finished: boolean; has_progress: boolean }>>({})
   
   // 使用 useRef 来跟踪是否已经加载过数据
   const prevTaskIdRef = useRef<string | null>(null)
 
+  // 打开课程时批量加载进度
   useEffect(() => {
     if (showLessonDrawer && selectedTask?.task_id) {
-      // 检查是否已经加载过相同的数据
-      if (prevTaskIdRef.current === selectedTask.task_id) {
-        return
-      }
-      
       prevTaskIdRef.current = selectedTask.task_id
       loadTaskInfo()
+      loadLessonProgress()
     } else {
       setTaskInfo(null)
+      setLessonProgressMap({})
       prevTaskIdRef.current = null
     }
   }, [showLessonDrawer, selectedTask?.task_id])
+
+  const loadLessonProgress = async () => {
+    try {
+      // 循环拉取全量进度：perPage 上限 200，超过 200 条时按 count 补齐剩余页，
+      // 避免章节进度圆点因分页截断而缺失
+      const all: ProgressItem[] = []
+      const first = await getMyProgress({ page: 1, perPage: 200 })
+      all.push(...(first.rows || []))
+      const total = first.count || 0
+      const pages = Math.ceil(total / 200)
+      for (let page = 2; page <= pages; page++) {
+        const res = await getMyProgress({ page, perPage: 200 })
+        all.push(...(res.rows || []))
+        if (!res.rows || res.rows.length < 200) break // 服务端已返回完，提前退出
+      }
+      const map: Record<string, { is_finished: boolean; has_progress: boolean }> = {}
+      all.forEach((p) => {
+        if (p.task_id) {
+          map[p.task_id] = {
+            is_finished: !!p.is_finished,
+            has_progress: (p.position && p.position > 0) || (p.scroll_position && p.scroll_position > 0) || !!p.is_finished,
+          }
+        }
+      })
+      setLessonProgressMap(map)
+    } catch (error) {
+      console.error('Failed to load lesson progress', error)
+    }
+  }
 
   const loadTaskInfo = async () => {
     if (!selectedTask?.task_id) return
@@ -292,9 +322,27 @@ export const LessonDrawer: React.FC<LessonDrawerProps> = ({
                             {String(globalIndex + 1).padStart(2, '0')}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <h5 className="text-sm font-medium text-gray-800 truncate">
-                              {lesson.task_name}
-                            </h5>
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  lessonProgressMap[lesson.task_id]?.is_finished
+                                    ? 'bg-green-500'
+                                    : lessonProgressMap[lesson.task_id]?.has_progress
+                                    ? 'bg-blue-500'
+                                    : 'bg-gray-300'
+                                }`}
+                                title={
+                                  lessonProgressMap[lesson.task_id]?.is_finished
+                                    ? '已学完'
+                                    : lessonProgressMap[lesson.task_id]?.has_progress
+                                    ? '学习中'
+                                    : '未开始'
+                                }
+                              />
+                              <h5 className="text-sm font-medium text-gray-800 truncate">
+                                {lesson.task_name}
+                              </h5>
+                            </div>
                             {lesson.subtitle && lesson.subtitle !== '无' && (
                               <p className="text-xs text-gray-500 mt-1 line-clamp-2">
                                 {lesson.subtitle}
@@ -350,7 +398,11 @@ export const LessonDrawer: React.FC<LessonDrawerProps> = ({
         taskId={selectedLessonId}
         lessonList={lessonList}
         currentIndex={currentLessonGlobalIndex % 10}
-        onClose={() => setShowDetail(false)}
+        onClose={() => {
+          setShowDetail(false)
+          // 关闭详情后刷新章节进度圆点
+          loadLessonProgress()
+        }}
         onPrev={handlePrev}
         onNext={handleNext}
         hasPrev={currentLessonGlobalIndex > 0}

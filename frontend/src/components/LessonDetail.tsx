@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp } from 'lucide-react'
 import { getTaskInfo, getArticleComments, getCommentDiscussions, type TaskInfoResponse, downloadPdfBlob } from '@/api/task'
+import { getProgress, saveProgress, type ProgressItem } from '@/api/progress'
 import { downloadFileFromBlob, showErrorMessage } from '@/utils/request'
 import type Hls from 'hls.js'
 
@@ -25,6 +26,104 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   hasPrev,
   hasNext,
 }) => {
+  // ===== 学习进度上报（定义在顶部，供 handleClose / handleVideoTimeUpdate 引用）=====
+  const flushProgress = useCallback(() => {
+    const p = progressRef.current
+    if (!p || !p.task_id) return
+    const payload = {
+      task_id: p.task_id,
+      task_pid: p.task_pid,
+      task_type: p.task_type,
+      position: p.position || 0,
+      scroll_position: p.scroll_position || 0,
+      duration: p.duration || 0,
+      is_finished: !!p.is_finished,
+    }
+    const doSave = (retry = true) => {
+      saveProgress(payload)
+        .catch(() => {
+          // 网络抖动/瞬时失败时重试一次，避免进度丢失
+          if (retry) {
+            setTimeout(() => doSave(false), 800)
+          }
+        })
+    }
+    doSave()
+    lastScrollReportRef.current = Date.now()
+    lastVideoReportRef.current = Date.now()
+  }, [])
+
+  const reportScrollProgress = useCallback(() => {
+    const content = contentRef.current
+    if (!content) return
+    const p = progressRef.current
+    if (!p) return
+    p.scroll_position = content.scrollTop
+    // 读完判定（满足任一）：
+    // 1. 内容不足一屏（无需滚动）
+    // 2. 已滚动超过可滚动高度的 95%
+    // 3. 距离底部 50px 内
+    const clientH = content.clientHeight
+    const scrollH = content.scrollHeight
+    const scrollable = scrollH - clientH
+    const atBottom =
+      scrollable <= 0 ||
+      content.scrollTop + clientH >= scrollH - 50 ||
+      (scrollable > 0 && content.scrollTop >= scrollable * 0.95)
+    if (atBottom) {
+      // 有图文内容滚动到底即学完（不管视频播没播，也不管音频播没播）
+      p.is_finished = true
+      flushProgress()
+      return
+    }
+    // 1.5s 防抖
+    const now = Date.now()
+    if (now - lastScrollReportRef.current >= 1500) {
+      flushProgress()
+    }
+  }, [flushProgress])
+
+  const reportVideoProgress = useCallback(() => {
+    const video = videoRef.current
+    const p = progressRef.current
+    if (!video || !p) return
+    p.position = Math.floor(video.currentTime)
+    if (video.duration && isFinite(video.duration)) {
+      p.duration = Math.floor(video.duration)
+    }
+    // 距上次上报 >5s 才写
+    const now = Date.now()
+    if (now - lastVideoReportRef.current >= 5000) {
+      flushProgress()
+    }
+  }, [flushProgress])
+
+  // 关闭时 flush 最后一次未上报的进度
+  const handleClose = useCallback(() => {
+    if (scrollDebounceRef.current) {
+      clearTimeout(scrollDebounceRef.current)
+      scrollDebounceRef.current = null
+    }
+    // 读完兜底：关闭瞬间再检查一次是否已滚到底/内容不足一屏，
+    // 防止最后的 scroll 事件因时序问题没触发 atBottom 判定
+    const content = contentRef.current
+    const p = progressRef.current
+    if (content && p && !p.is_finished) {
+      const clientH = content.clientHeight
+      const scrollH = content.scrollHeight
+      const scrollable = scrollH - clientH
+      const atBottom =
+        scrollable <= 0 ||
+        content.scrollTop + clientH >= scrollH - 50 ||
+        (scrollable > 0 && content.scrollTop >= scrollable * 0.95)
+      if (atBottom) {
+        p.is_finished = true
+        p.scroll_position = Math.max(p.scroll_position || 0, content.scrollTop)
+      }
+    }
+    flushProgress()
+    onClose()
+  }, [flushProgress, onClose])
   const [loading, setLoading] = useState(false)
   const [pdfDownloading, setPdfDownloading] = useState(false)
   const [taskInfoResponse, setTaskInfoResponse] = useState<TaskInfoResponse | null>(null)
@@ -59,6 +158,12 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   const contentRef = useRef<HTMLDivElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const prevTaskIdRef = useRef<string | null>(null)
+  // 进度上报相关
+  const progressRef = useRef<ProgressItem | null>(null)
+  const lastScrollReportRef = useRef(0)
+  const lastVideoReportRef = useRef(0)
+  const scrollDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const progressRestoredRef = useRef(false)
 
   useEffect(() => {
     const handleResize = () => setIsMobile(typeof window !== 'undefined' ? window.innerWidth < 768 : false)
@@ -185,6 +290,15 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       setShowScrollTop(false)
       setComments([])
       setCommentsPage(1)
+      // 重置进度状态（新章节）
+      progressRef.current = null
+      progressRestoredRef.current = false
+      lastScrollReportRef.current = 0
+      lastVideoReportRef.current = 0
+      if (scrollDebounceRef.current) {
+        clearTimeout(scrollDebounceRef.current)
+        scrollDebounceRef.current = null
+      }
       if (contentRef.current) {
         contentRef.current.scrollTop = 0
       }
@@ -193,11 +307,67 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
         videoRef.current.pause()
       }
       getTaskInfo(taskId)
-        .then((data) => {
+        .then(async (data) => {
           setTaskInfoResponse(data)
           const otherId = data.task?.other_id || data.article?.other_id || data.article?.id
           if (otherId) {
             loadComments(otherId, 1)
+          }
+          // 加载并恢复学习进度
+          progressRestoredRef.current = false
+          try {
+            const saved = await getProgress(taskId)
+            if (saved?.task_id) {
+              progressRef.current = {
+                task_id: taskId,
+                task_pid: data.task?.task_pid || saved.task_pid,
+                task_type: data.task?.task_type || saved.task_type,
+                position: saved.position || 0,
+                scroll_position: saved.scroll_position || 0,
+                duration: saved.duration || 0,
+                is_finished: saved.is_finished || false,
+              }
+              // 恢复滚动位置：文章内容加载后
+              if (saved.scroll_position && saved.scroll_position > 0) {
+                const content = contentRef.current
+                if (content) {
+                  // 等 DOM 渲染完成后恢复
+                  setTimeout(() => {
+                    content.scrollTop = saved.scroll_position || 0
+                  }, 50)
+                }
+              }
+              // 恢复视频进度：在 loadedmetadata 后设置（见 video 初始化 effect）
+              if (saved.position && saved.position > 0) {
+                const video = videoRef.current
+                const dur = saved.duration || 0
+                if (video && dur > 0 && saved.position < dur - 5) {
+                  video.currentTime = saved.position
+                }
+              }
+            } else {
+              progressRef.current = {
+                task_id: taskId,
+                task_pid: data.task?.task_pid || '',
+                task_type: data.task?.task_type || '',
+                position: 0,
+                scroll_position: 0,
+                duration: 0,
+                is_finished: false,
+              }
+            }
+            progressRestoredRef.current = true
+          } catch (err) {
+            console.error('获取学习进度失败', err)
+            progressRef.current = {
+              task_id: taskId,
+              task_pid: data.task?.task_pid || '',
+              task_type: data.task?.task_type || '',
+              position: 0,
+              scroll_position: 0,
+              duration: 0,
+              is_finished: false,
+            }
           }
         })
         .catch((err) => {
@@ -230,6 +400,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       } else {
         setShowScrollTop(false)
       }
+
+      // 学习进度上报（滚动位置 + 滚到底完成）
+      reportScrollProgress()
     }
 
     const contentElement = contentRef.current
@@ -238,6 +411,52 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       return () => contentElement.removeEventListener('scroll', handleScroll)
     }
   }, [taskInfo])
+
+  // 内容渲染完成后主动检查一次完成度（短内容无 scroll 事件时也能标记读完）
+  useEffect(() => {
+    if (!taskInfo || !article?.content) return
+    const timer = setTimeout(() => {
+      reportScrollProgress()
+    }, 200)
+    return () => clearTimeout(timer)
+  }, [taskInfo, article?.content, reportScrollProgress])
+
+  // 读完轮询兜底：图片懒加载等会让 scrollHeight 在滚动后变大，
+  // 用户滚到"旧底"时判定可能失败，且图片加载完后不再触发 scroll 事件。
+  // 每 2s 检查一次是否滚到底（最长 60s），命中即标记读完。
+  useEffect(() => {
+    if (!taskInfo || !article?.content) return
+    let stop = false
+    let count = 0
+    let checkTimer: ReturnType<typeof setTimeout>
+    const check = () => {
+      if (stop) return
+      const content = contentRef.current
+      const p = progressRef.current
+      if (content && p) {
+        const clientH = content.clientHeight
+        const scrollH = content.scrollHeight
+        const scrollable = scrollH - clientH
+        const atBottom =
+          scrollable <= 0 ||
+          content.scrollTop + clientH >= scrollH - 50 ||
+          (scrollable > 0 && content.scrollTop >= scrollable * 0.95)
+        if (atBottom) {
+          p.is_finished = true
+          flushProgress()
+          return // 命中后停止轮询
+        }
+      }
+      count += 1
+      if (count >= 30) return // 60s 后停止
+      checkTimer = setTimeout(check, 2000)
+    }
+    checkTimer = setTimeout(check, 1500)
+    return () => {
+      stop = true
+      clearTimeout(checkTimer)
+    }
+  }, [taskInfo, article?.content, flushProgress])
 
   const scrollToTop = () => {
     if (contentRef.current) {
@@ -379,8 +598,10 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
         ...prev,
         currentTime: video.currentTime
       }))
+      // 学习进度：视频播放位置（节流上报）
+      reportVideoProgress()
     }
-  }, [])
+  }, [reportVideoProgress])
 
   const handleVideoPlay = useCallback(() => {
     setVideoState(prev => ({ ...prev, isPlaying: true }))
@@ -574,6 +795,22 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
               onTimeUpdate={handleVideoTimeUpdate}
               onPlay={handleVideoPlay}
               onPause={handleVideoPause}
+              onLoadedMetadata={() => {
+                // 恢复视频进度（HLS 就绪后）
+                const p = progressRef.current
+                const video = videoRef.current
+                if (p && p.position && p.position > 0 && video && video.duration && p.position < video.duration - 5) {
+                  video.currentTime = p.position
+                }
+              }}
+              onEnded={() => {
+                // 纯视频章节（无图文）ended 即学完
+                const p = progressRef.current
+                if (p && !article?.content) {
+                  p.is_finished = true
+                  flushProgress()
+                }
+              }}
             />
           </div>
           <div
@@ -599,6 +836,20 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
             onTimeUpdate={handleVideoTimeUpdate}
             onPlay={handleVideoPlay}
             onPause={handleVideoPause}
+            onLoadedMetadata={() => {
+              const p = progressRef.current
+              const video = videoRef.current
+              if (p && p.position && p.position > 0 && video && video.duration && p.position < video.duration - 5) {
+                video.currentTime = p.position
+              }
+            }}
+            onEnded={() => {
+              const p = progressRef.current
+              if (p && !article?.content) {
+                p.is_finished = true
+                flushProgress()
+              }
+            }}
           />
         </div>
       </div>
@@ -609,7 +860,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
     <div className="fixed inset-0 z-[80]">
       <div
         className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80]"
-        onClick={onClose}
+        onClick={handleClose}
       />
       {renderScrollTopButton()}
       
@@ -640,7 +891,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
               )}
             </div>
             <button
-              onClick={onClose}
+              onClick={handleClose}
               className="p-2 hover:bg-white/50 rounded-lg transition-colors ml-4"
             >
               <X size={20} className="text-gray-500" />
@@ -705,7 +956,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                         try {
                           const blob = await downloadPdfBlob({ id: taskId! })
                           // 用文章标题作为文件名，与 TaskList 保持一致
-                          const title = article?.title || taskInfo?.name || taskId
+                          const title = article?.title || taskInfo?.task_name || taskId
                           const safeName = title
                             .replace(/"/g, '-')
                             .replace(/\|/g, '-')
