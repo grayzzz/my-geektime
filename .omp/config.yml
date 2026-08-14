@@ -31,7 +31,7 @@ tools:
   bash:
     patterns:
       # 推送分支前必须确认，避免意外 push 到远端
-      - match: "git push"
+      - match: "git push *"
         approval: prompt
 
       # 删除操作必须确认
