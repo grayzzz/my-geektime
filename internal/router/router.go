@@ -72,5 +72,7 @@ func NewRouter(assets embed.FS) (*gin.Engine, error) {
 
 	collect(public, private)
 
+	progress(public, private)
+
 	return e, nil
 }

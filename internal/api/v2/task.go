@@ -251,6 +251,9 @@ func (t *Task) Info(c *gin.Context) {
 		resp.Task.Author = articleData.Info.Author
 		resp.Task.Subtitle = articleData.Info.Subtitle
 		resp.Task.IsVideo = articleData.Info.IsVideo
+		// 文章的 task_pid 即所属课程 pid，必须返回，否则前端存进度时 task_pid 为空，
+		// 课程进度汇总（/progress/course 按 task_pid 统计）会漏掉该章节
+		resp.Task.TaskPid = l.TaskPid
 		resp.Article = articleData.Info
 		resp.Article.Cover.Square = service.URLProxyReplace(articleData.Info.Cover.Square)
 		resp.Article.Cover.Default = service.URLProxyReplace(articleData.Info.Cover.Default)

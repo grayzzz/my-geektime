@@ -13,6 +13,7 @@ export interface TaskListParams {
 
 export interface TaskItem {
   task_id: string
+  task_pid?: string
   task_name: string
   subtitle: string
   cover: string
@@ -38,8 +39,15 @@ export interface TaskItem {
   redirect?: string
   dir?: string
   is_collected?: boolean
+  course_progress?: {
+    finished_count: number
+    total_count: number
+    percent: number
+    last_task_id: string
+    last_task_name: string
+    updated_at: number
+  }
 }
-
 export const getTaskList = (params?: TaskListParams) => {
   return request.get<any, { rows: TaskItem[]; count: number }>('/task/list', { params })
 }

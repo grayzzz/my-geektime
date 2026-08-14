@@ -35,6 +35,14 @@ export interface CollectItem {
     doc?: string
     redirect?: string
     dir?: string
+    course_progress?: {
+      finished_count: number
+      total_count: number
+      percent: number
+      last_task_id: string
+      last_task_name: string
+      updated_at: number
+    }
   }
 }
 

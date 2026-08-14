@@ -1,0 +1,34 @@
+syntax="proto3";
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.populate_all) = true;
+option go_package = "model";
+
+// Progress
+message Progress {
+  // id
+  int64 id = 1 [(gogoproto.moretags) = "gorm:\"primaryKey;autoIncrement;comment:id\""];
+  // uid
+  string uid = 2 [(gogoproto.moretags) = "gorm:\"index:,unique,composite:user_progress;size:255;comment:uid\""];
+  // task id
+  string task_id = 3 [(gogoproto.moretags) = "gorm:\"index:,unique,composite:user_progress;size:128;comment:task id\""];
+  // task pid
+  string task_pid = 4 [(gogoproto.moretags) = "gorm:\"index;size:128;comment:task pid\""];
+  // task type
+  string task_type = 5 [(gogoproto.moretags) = "gorm:\"size:50;comment:task type\""];
+  // position (video play seconds, 0 if no video)
+  int64 position = 6 [(gogoproto.moretags) = "gorm:\"comment:position\""];
+  // duration (video total seconds, 0 if no video)
+  int64 duration = 7 [(gogoproto.moretags) = "gorm:\"comment:duration\""];
+  // scroll position (article scroll height px, 0 if no article)
+  int64 scroll_position = 8 [(gogoproto.moretags) = "gorm:\"comment:scroll position\""];
+  // is finished
+  bool is_finished = 9 [(gogoproto.moretags) = "gorm:\"comment:is finished\""];
+  // created_at
+  int64 created_at = 25 [(gogoproto.moretags) = "gorm:\"index;comment:created at\""];
+  // updated_at
+  int64 updated_at = 26 [(gogoproto.moretags) = "gorm:\"index;comment:updated at\""];
+  // deleted_at
+  int64 deleted_at = 27 [(gogoproto.moretags) = "gorm:\"index;comment:deleted at\""];
+}
