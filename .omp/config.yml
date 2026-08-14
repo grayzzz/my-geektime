@@ -1,0 +1,42 @@
+# OMP 项目级配置：仅对本仓库生效
+# 覆盖层级：项目配置 > 全局配置
+
+# ---------- 工具授权 ----------
+# approvalMode 可选 always-ask / write / yolo
+# - always-ask：除了纯读操作，其他都弹确认
+# - write：读/写自动放行，执行类操作弹确认
+# - yolo：全部自动放行
+tools:
+  approvalMode: write
+
+  # 按工具设置默认策略
+  approval:
+    read: allow          # 读操作默认放行
+    bash: allow          # bash 执行默认放行
+    edit: allow          # 编辑操作默认放行
+    write: allow         # 写文件默认放行
+    hub: allow           # hub 启动/停止进程默认放行
+    eval: allow          # Python/JS 代码执行默认放行
+    task: allow          # 子任务启动默认放行
+    browser: allow       # 浏览器控制默认放行
+    web_search: allow    # 网络搜索默认放行
+    web_fetch: allow     # 网页抓取默认放行
+    inspect_image: allow # 图片分析默认放行
+    debug: allow         # 调试器默认放行
+
+  # ---------- bash 命令级规则 ----------
+  # 规则从上到下匹配，第一条命中即生效
+  # prompt = 执行前弹确认；allow = 直接放行；deny = 直接拒绝
+  # 注意：allow 只匹配完整命令；prompt/deny 会拆到复合命令的每一段
+  bash:
+    patterns:
+      # 推送分支前必须确认，避免意外 push 到远端
+      - match: "git push"
+        approval: prompt
+
+      # 删除操作必须确认
+      - match: "rm -rf *"
+        approval: deny
+
+      # 其他 bash 命令遵循 tools.approval.bash 的默认策略
+      # 上面未匹配到的命令会回退到 bash: allow，直接放行

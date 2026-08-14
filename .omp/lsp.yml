@@ -1,0 +1,76 @@
+# LSP 空闲超时（毫秒）。超过该时间未使用则自动关闭，
+# 避免后台语言服务器长期占用资源。
+idleTimeoutMs: 600000
+
+# ---------- 语言服务器配置 ----------
+# 每个 server 通过 rootMarkers 判断项目根目录，
+# 根目录内的文件会自动交给对应 server 处理。
+servers:
+  # Go 语言服务器
+  gopls:
+    # 以 go.mod 作为项目根标记
+    rootMarkers:
+      - go.mod
+
+  # TypeScript/JavaScript 语言服务器
+  typescript-language-server:
+    # 项目根标记：package.json 或 tsconfig.json
+    rootMarkers:
+      - package.json
+      - tsconfig.json
+    # 指定 TypeScript SDK 路径，优先使用项目内版本
+    settings:
+      typescript:
+        tsdk: ./node_modules/typescript/lib
+
+  # ESLint 语言服务器（提供 lint 诊断）
+  eslint:
+    # 使用 VS Code 版 eslint server
+    command: vscode-eslint-language-server
+    args:
+      - --stdio
+    # 处理以下文件类型
+    fileTypes:
+      - .ts
+      - .tsx
+      - .js
+      - .jsx
+    # 项目根标记：任意一个存在即认定为项目根
+    rootMarkers:
+      - package.json
+      - .eslintrc.js
+      - .eslintrc.cjs
+      - .eslintrc.json
+      - .eslintrc.yml
+      - .eslintrc.yaml
+
+  # Tailwind CSS 智能提示
+  tailwindcss:
+    # 以 tailwind/postcss 配置判断项目根
+    rootMarkers:
+      - tailwind.config.js
+      - tailwind.config.ts
+      - postcss.config.js
+      - postcss.config.cjs
+
+  # HTML 语言服务器
+  vscode-html-language-server:
+    fileTypes:
+      - .html
+
+  # CSS 语言服务器
+  vscode-css-language-server:
+    fileTypes:
+      - .css
+
+  # JSON 语言服务器
+  vscode-json-language-server:
+    fileTypes:
+      - .json
+      - .jsonc
+
+  # YAML 语言服务器
+  yamlls:
+    fileTypes:
+      - .yml
+      - .yaml
