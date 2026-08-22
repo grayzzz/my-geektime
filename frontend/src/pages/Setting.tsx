@@ -1,11 +1,23 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { getSetting, updateSetting, SettingData } from '@/api/setting'
+import { exportBackup, importBackup } from '@/api/backup'
+import { downloadFileFromBlob } from '@/utils/request'
+import { useAuthStore } from '@/store/auth'
 import { Button, Card, Input, Switch, Spinner } from '@/components/ui'
 import { useToast } from '@/components/ui/Toast'
+
+// 与后端 user.AdminRoleId 保持一致
+const ADMIN_ROLE_ID = 1
+// 与后端 maxBackupUploadSize 保持一致
+const MAX_BACKUP_SIZE = 2 * 1024 * 1024 * 1024
 
 export const Setting: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [backing, setBacking] = useState(false)
+  const [restoring, setRestoring] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const isAdmin = useAuthStore((s) => s.user?.role_id === ADMIN_ROLE_ID)
   const [settings, setSettings] = useState<SettingData>({
     storage: { host: '' },
     site: {
@@ -135,6 +147,47 @@ export const Setting: React.FC = () => {
         },
       },
     }))
+  }
+
+  const handleBackupExport = async () => {
+    setBacking(true)
+    try {
+      const blob = await exportBackup()
+      downloadFileFromBlob(blob, `my-geektime-backup-${Date.now()}.tar.gz`)
+      addToast('备份已导出', 'success')
+    } catch (error) {
+      addToast('导出失败，请重试', 'error')
+      console.error('Failed to export backup', error)
+    } finally {
+      setBacking(false)
+    }
+  }
+
+  const handleBackupImportClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleBackupFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (file.size > MAX_BACKUP_SIZE) {
+      addToast('备份文件超过 2GB 上限', 'error')
+      return
+    }
+    if (!window.confirm('导入将清空现有全部数据并覆盖为备份内容，确认继续？')) return
+    setRestoring(true)
+    try {
+      await importBackup(file)
+      addToast('导入成功，正在刷新', 'success')
+      // 全量覆盖后页面数据已失效，刷新重新加载
+      setTimeout(() => window.location.reload(), 800)
+    } catch (error) {
+      addToast('导入失败，请检查备份文件', 'error')
+      console.error('Failed to import backup', error)
+    } finally {
+      setRestoring(false)
+    }
   }
 
   if (loading) {
@@ -291,6 +344,32 @@ export const Setting: React.FC = () => {
         </div>
         </div>
       </Card>
+
+      {isAdmin && (
+        <Card header="数据备份" className="mt-4">
+          <div className="pl-4 pr-4 pt-4 pb-4">
+            <p className="text-sm text-gray-500 mb-4">
+              导出当前数据库全部内容（课程/文章/任务/收藏/进度/评论/用户），不含已下载的音视频文件。
+              导入将以备份内容覆盖现有全部数据，请谨慎操作。
+            </p>
+            <div className="flex items-center gap-4">
+              <Button onClick={handleBackupExport} disabled={backing} size="md" className="px-8 py-2.5">
+                {backing ? '导出中...' : '导出备份'}
+              </Button>
+              <Button variant="danger" onClick={handleBackupImportClick} disabled={restoring} size="md" className="px-8 py-2.5">
+                {restoring ? '导入中...' : '导入备份'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".tar.gz"
+                className="hidden"
+                onChange={handleBackupFileSelected}
+              />
+            </div>
+          </div>
+        </Card>
+      )}
     </div>
   )
 }

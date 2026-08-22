@@ -70,6 +70,8 @@ func NewRouter(assets embed.FS) (*gin.Engine, error) {
 
 	setting(public, private)
 
+	backup(public, private)
+
 	collect(public, private)
 
 	progress(public, private)

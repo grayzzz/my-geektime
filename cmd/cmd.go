@@ -63,6 +63,8 @@ func (app *App) Run() {
 	subCLI.NewSubCommandFunction("docs-local", "make geektime local docs", cliApp.LocalDoc)
 	subCLI.NewSubCommandFunction("label", "make geektime label", cliApp.Label)
 	subCLI.NewSubCommandFunction("redirect", "check geektime redirect url", cliApp.Redirect)
+	subCLI.NewSubCommandFunction("backup", "backup database data to tar.gz", cliApp.Backup)
+	subCLI.NewSubCommandFunction("restore", "restore database data from backup tar.gz", cliApp.Restore)
 	if err := c.Run(); err != nil {
 		fmt.Println(color.Red(err.Error()))
 	}
