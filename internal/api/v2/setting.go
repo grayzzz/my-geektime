@@ -32,6 +32,7 @@ func (s *Setting) Update(c *gin.Context) {
 	global.CONF.Site.Play.ProxyUrl = req.SitePlayUrls
 	global.CONF.Site.Proxy.ProxyUrl = req.SiteProxyURL
 	global.CONF.Site.Proxy.Urls = req.SiteProxyUrls
+	global.CONF.AI = req.AI
 
 	if req.Cookie != "" {
 		var auth geek.AuthResponse
@@ -68,6 +69,7 @@ func (s *Setting) Query(c *gin.Context) {
 	resp := setting.QueryResponse{
 		Storage: global.CONF.Storage,
 		Site:    global.CONF.Site,
+		AI:      global.CONF.AI,
 	}
 	customConfPath := global.CustomConfigFile
 	if len(global.CONFPath) > 0 {
@@ -86,6 +88,7 @@ func (s *Setting) Query(c *gin.Context) {
 		}
 		resp.Site = cfg.Site
 		resp.Storage = cfg.Storage
+		resp.AI = cfg.AI
 	}
 	global.OK(c, resp)
 }

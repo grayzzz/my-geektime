@@ -8,4 +8,5 @@ type Config struct {
 	Storage Storage  `json:"storage" yaml:"storage"`
 	Browser Browser  `json:"browser" yaml:"browser"`
 	Site    Site     `json:"site" yaml:"site"`
+	AI      AI       `json:"ai" yaml:"ai"`
 }

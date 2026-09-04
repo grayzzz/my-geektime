@@ -28,6 +28,7 @@ export const Setting: React.FC = () => {
       proxy: { proxy_url: '', urls: [] },
       cookie: { geektime: '' },
     },
+    ai: { base_url: '', api_key: '', model: '' },
   })
 
   const { addToast } = useToast()
@@ -61,6 +62,7 @@ export const Setting: React.FC = () => {
         siteProxyUrls: settings.site.proxy.urls,
         sitePlayUrls: settings.site.play.proxy_url,
         cookie: settings.site.cookie.geektime,
+        ai: settings.ai,
       })
       addToast('保存成功', 'success')
     } catch (error) {
@@ -330,6 +332,46 @@ export const Setting: React.FC = () => {
               <Button variant="light" size="sm" onClick={handlePlayUrlAdd}>
                 添加URL
               </Button>
+            </div>
+          </div>
+
+          <div className="border-t pt-3">
+            <h3 className="text-lg font-medium mb-2">AI 服务</h3>
+            <div className="space-y-3">
+              <Input
+                label="Base URL"
+                placeholder="OpenAI 兼容 API 地址，如 https://api.deepseek.com/v1"
+                value={settings.ai.base_url}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    ai: { ...prev.ai, base_url: e.target.value },
+                  }))
+                }
+              />
+              <Input
+                label="API Key"
+                type="password"
+                placeholder="请输入 API Key"
+                value={settings.ai.api_key}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    ai: { ...prev.ai, api_key: e.target.value },
+                  }))
+                }
+              />
+              <Input
+                label="模型"
+                placeholder="如 deepseek-chat / qwen-plus / glm-4"
+                value={settings.ai.model}
+                onChange={(e) =>
+                  setSettings((prev) => ({
+                    ...prev,
+                    ai: { ...prev.ai, model: e.target.value },
+                  }))
+                }
+              />
             </div>
           </div>
 

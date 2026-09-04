@@ -32,6 +32,7 @@ go.work.sum
 logs/
 site/
 repo/
+custom_config.yaml
 node_modules/
 *.db
 .venv/
@@ -47,6 +48,7 @@ web/index.html
 .cursor/
 .aider*
 .continue/
+.workbuddy/
 
 .cody/
 

@@ -59,3 +59,10 @@ site:
       username: 
       password: 
       from: 
+
+ai:  # AI 摘要与文章问答使用的 OpenAI 兼容服务配置（DeepSeek / Qwen / GLM 等）
+     # 推荐在网页「设置页 → AI 服务」中填写并保存（会整体写入 custom_config.yaml 并即时生效）；
+     # 无界面部署时也可直接在此填写后重启服务。
+  base_url: ""  # API 根地址，一般以 /v1 结尾，如 https://api.deepseek.com/v1（勿带尾斜杠）
+  api_key: ""   # 服务商密钥，如 sk-xxx；三项任一为空时 AI 功能不可用并提示先配置
+  model: ""     # 模型名称，如 deepseek-chat / qwen-plus / glm-4

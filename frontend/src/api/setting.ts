@@ -22,6 +22,11 @@ export interface SettingData {
       geektime: string
     }
   }
+  ai: {
+    base_url: string
+    api_key: string
+    model: string
+  }
 }
 
 export const getSetting = () => {
