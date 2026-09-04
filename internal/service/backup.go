@@ -56,6 +56,7 @@ func backupTables() []backupTable {
 		{name: "Collect", rows: &[]*model.Collect{}, dst: &model.Collect{}},
 		{name: "Progress", rows: &[]*model.Progress{}, dst: &model.Progress{}},
 		{name: "SysDict", rows: &[]*model.SysDict{}, dst: &model.SysDict{}},
+		{name: "AISummary", rows: &[]*model.AISummary{}, dst: &model.AISummary{}},
 	}
 }
 

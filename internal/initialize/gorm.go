@@ -34,6 +34,7 @@ func Gorm(_ context.Context) error {
 		&model.Collect{},
 		&model.Progress{},
 		&model.SysDict{},
+		&model.AISummary{},
 	); err != nil {
 		return err
 	}

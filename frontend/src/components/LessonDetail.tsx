@@ -1,9 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp } from 'lucide-react'
+import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp, Sparkles } from 'lucide-react'
 import { getTaskInfo, getArticleComments, getCommentDiscussions, type TaskInfoResponse, downloadPdfBlob } from '@/api/task'
 import { getProgress, saveProgress, type ProgressItem } from '@/api/progress'
 import { downloadFileFromBlob, showErrorMessage } from '@/utils/request'
 import type Hls from 'hls.js'
+import { AIPanel } from './AIPanel'
 
 interface LessonDetailProps {
   show: boolean
@@ -125,6 +126,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
     onClose()
   }, [flushProgress, onClose])
   const [loading, setLoading] = useState(false)
+  const [aiOpen, setAiOpen] = useState(false)
   const [pdfDownloading, setPdfDownloading] = useState(false)
   const [taskInfoResponse, setTaskInfoResponse] = useState<TaskInfoResponse | null>(null)
   const taskInfo = taskInfoResponse?.task || null
@@ -983,6 +985,17 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                       导出PDF
                     </div>
                   </div>
+                  <div className="relative group">
+                    <button
+                      onClick={() => setAiOpen(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors text-sm"
+                    >
+                      <Sparkles size={14} />
+                    </button>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
+                      AI 助手
+                    </div>
+                  </div>
                   {hasPrev && (
                     <div className="relative group">
                       <button
@@ -1219,6 +1232,16 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
             draggable={false}
           />
         </div>
+      )}
+
+      {/* AI 助手面板（仅主阅读面，轻量预览抽屉不挂载） */}
+      {aiOpen && (
+        <AIPanel
+          aid={String(taskInfo?.other_id || article?.other_id || article?.id || '')}
+          title={article?.title || taskInfo?.task_name || ''}
+          open={aiOpen}
+          onClose={() => setAiOpen(false)}
+        />
       )}
     </div>
   )
