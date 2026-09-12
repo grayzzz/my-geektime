@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
-import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp, Sparkles } from 'lucide-react'
-import { getTaskInfo, getArticleComments, getCommentDiscussions, type TaskInfoResponse, downloadPdfBlob } from '@/api/task'
+import { X, ExternalLink, FileText, FileDown, ChevronLeft, ChevronRight, Maximize2, Rocket, MessageCircle, ThumbsUp, Sparkles, BookDown } from 'lucide-react'
+import { getTaskInfo, getArticleComments, getCommentDiscussions, exportTask, type TaskInfoResponse, downloadPdfBlob } from '@/api/task'
 import { getProgress, saveProgress, type ProgressItem } from '@/api/progress'
 import { downloadFileFromBlob, showErrorMessage } from '@/utils/request'
 import type Hls from 'hls.js'
@@ -128,6 +128,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   const [loading, setLoading] = useState(false)
   const [aiOpen, setAiOpen] = useState(false)
   const [pdfDownloading, setPdfDownloading] = useState(false)
+  const [epubDownloading, setEpubDownloading] = useState(false)
   const [taskInfoResponse, setTaskInfoResponse] = useState<TaskInfoResponse | null>(null)
   const taskInfo = taskInfoResponse?.task || null
   const article = taskInfoResponse?.article || null
@@ -948,6 +949,44 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
                     </a>
                     <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
                       导出Markdown
+                    </div>
+                  </div>
+                  <div className="relative group">
+                    <button
+                      disabled={epubDownloading}
+                      onClick={async () => {
+                        // EPUB 是整门课程级别的单文件电子书（后端按 pid 聚合所有章节 + 留言），
+                        // 因此这里用 task_pid，而不是当前文章 id
+                        const pid = taskInfo?.task_pid || taskId
+                        if (!pid) return
+                        setEpubDownloading(true)
+                        try {
+                          const blob = await exportTask({ pid, type: 'epub', comments: 'all' })
+                          const title = taskInfo?.task_name || article?.title || pid
+                          const safeName = title
+                            .replace(/"/g, '-')
+                            .replace(/\|/g, '-')
+                            .replace(/｜/g, '-')
+                            .replace(/:/g, '：')
+                            .replace(/”/g, '“')
+                            .replace(/\?/g, '？')
+                            .replace(/&/g, '+')
+                            .replace(/\t/g, '')
+                            .replace(/ /g, '')
+                            .trim()
+                          downloadFileFromBlob(blob as Blob, `${safeName || pid}.epub`)
+                        } catch (err: any) {
+                          showErrorMessage(err?.message || '导出EPUB失败')
+                        } finally {
+                          setEpubDownloading(false)
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white rounded-lg transition-colors text-sm"
+                    >
+                      <BookDown size={14} />
+                    </button>
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[200px] text-center pointer-events-none z-20">
+                      {epubDownloading ? '正在生成EPUB...' : '导出EPUB（整门课程·含全部留言）'}
                     </div>
                   </div>
                   <div className="relative group">

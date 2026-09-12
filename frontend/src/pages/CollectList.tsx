@@ -21,7 +21,22 @@ import {
   RefreshCw,
   Rocket,
   BookOpen,
+  BookDown,
 } from 'lucide-react'
+
+// 下载文件名清洗（与 PDF 导出保持一致的规则），仅用于 EPUB 下载
+const collectSafeFileName = (name: string) =>
+  name
+    .replace(/"/g, '-')
+    .replace(/\|/g, '-')
+    .replace(/｜/g, '-')
+    .replace(/:/g, '：')
+    .replace(/”/g, '“')
+    .replace(/\?/g, '？')
+    .replace(/&/g, '+')
+    .replace(/\t/g, '')
+    .replace(/ /g, '')
+    .trim()
 
 const productTypeOptions = [
   { label: '全部类型', value: 0 },
@@ -273,7 +288,23 @@ export const CollectList: React.FC = () => {
 
   const handleExport = async (taskId: string, type: string) => {
     try {
-      if (type === 'markdown') {
+      if (type === 'epub') {
+        // EPUB 返回二进制流，必须插在 markdown 分支之前判断
+        const taskName = items.find((i) => i.item.task_id === taskId)?.item.task_name
+        const safeName = taskName ? collectSafeFileName(taskName) : ''
+        const loadingId = addToast('正在生成EPUB，请稍候...', 'info', Infinity)
+        try {
+          const blob = await exportTask({ pid: taskId, type, comments: 'all' })
+          downloadFileFromBlob(blob as Blob, `${safeName || taskId}.epub`)
+          removeToast(loadingId)
+          addToast('EPUB导出成功', 'success')
+        } catch (error: any) {
+          // 就地把失败原因透出（如"服务端返回空响应"），不要 rethrow 成笼统的"操作失败"
+          removeToast(loadingId)
+          addToast(error?.message || 'EPUB导出失败', 'error')
+          return
+        }
+      } else if (type === 'markdown') {
         const blob = await exportTask({ pid: taskId, type })
         const url = window.URL.createObjectURL(blob as Blob)
         const a = document.createElement('a')
@@ -574,6 +605,19 @@ export const CollectList: React.FC = () => {
                         </Button>
                         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                           导出Markdown
+                        </div>
+                      </div>
+                      <div className="relative group">
+                        <Button
+                          variant="light"
+                          size="sm"
+                          onClick={() => handleExport(item.item.task_id, 'epub')}
+                          className="!p-2"
+                        >
+                          <BookDown size={14} />
+                        </Button>
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
+                          导出EPUB（含全部留言）
                         </div>
                       </div>
                       {item.item.doc !== undefined ? (

@@ -769,5 +769,22 @@ func (t *Task) Export(c *gin.Context) {
 		}
 		docFullURL := global.Storage.GetUrl(docURL)
 		global.OK(c, gin.H{"doc": docFullURL})
+	case "epub":
+		// 追加分支：既有 markdown / docsite 两个 case 逐字不动。
+		// epub 需要联网补齐图片（本机缓存命中率约 14%），耗时可能远超普通接口，
+		// 因此前端必须为该请求单独设置长超时，不能吃 axios 全局 30 秒默认值。
+		dirName := service.VerifyFileName(product.Title)
+		archiveName := fmt.Sprintf("%s.epub", dirName)
+		generator := service.NewEpubGenerator()
+		buf, err := generator.MakeEpub(c, l.TaskId, product.Title, product.IntroHTML,
+			service.EpubOptions{Comments: req.Comments})
+		if err != nil {
+			global.FAIL(c, "fail.msg", err.Error())
+			return
+		}
+		c.Header("Content-Type", "application/epub+zip")
+		c.Header("Content-Disposition", "attachment; filename="+url.QueryEscape(archiveName))
+		c.Header("Content-Transfer-Encoding", "binary")
+		c.Data(200, "application/epub+zip", buf.Bytes())
 	}
 }

@@ -17,7 +17,7 @@ import { LessonDrawer } from '@/components/LessonDrawer'
 import { useAuthStore } from '@/store/auth'
 import { useToast } from '@/components/ui/Toast'
 import { useLessonList } from '@/hooks/useLessonList'
-import { Rocket, RefreshCw, Trash2, Heart, FileText } from 'lucide-react'
+import { Rocket, RefreshCw, Trash2, Heart, FileText, BookDown } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
 
 const productTypeOptions = [
@@ -306,6 +306,23 @@ export const TaskList: React.FC = () => {
         })
         .finally(() => {
           setPdfDownloading(false)
+        })
+      return
+    }
+
+    // EPUB 导出（二进制流 + 长耗时，必须插在 markdown 分支之前判断）
+    if (type === 'epub') {
+      const loadingId = addToast('正在生成EPUB，请稍候...', 'info', Infinity)
+      exportTask({ pid, type, comments: 'all' })
+        .then((blob) => {
+          downloadFileFromBlob(blob as Blob, `${safeName}.epub`)
+          removeToast(loadingId)
+          addToast('EPUB导出成功', 'success')
+        })
+        .catch((error) => {
+          console.error('Failed to export EPUB', error)
+          removeToast(loadingId)
+          addToast(error?.message || 'EPUB导出失败', 'error')
         })
       return
     }
@@ -610,6 +627,14 @@ export const TaskList: React.FC = () => {
                 </Button>
                 <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                   批量导出Markdown
+                </div>
+              </div>
+              <div className="relative group">
+                <Button size="sm" variant="light" onClick={() => handleBatchExport('epub')} className="!p-2">
+                  <BookDown size={14} />
+                </Button>
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
+                  批量导出EPUB（含全部留言）
                 </div>
               </div>
               {isAdmin && (

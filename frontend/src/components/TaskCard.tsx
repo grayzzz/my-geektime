@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui'
 import { TaskItem } from '@/api/task'
-import { Trash2, List, Download, Book, Sparkles, ExternalLink, Heart, FileText, FileDown } from 'lucide-react'
+import { Trash2, List, Download, Book, Sparkles, ExternalLink, Heart, FileText, FileDown, BookDown } from 'lucide-react'
 
 interface TaskCardProps {
   item: TaskItem
@@ -263,6 +263,22 @@ export const TaskCard: React.FC<TaskCardProps> = ({
               </Button>
               <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
                 导出Markdown
+              </div>
+            </div>
+            <div className="relative group">
+              <Button
+                variant="light"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onExport(item.task_id, 'epub', undefined, item.task_name)
+                }}
+                className="!p-2"
+              >
+                <BookDown size={14} />
+              </Button>
+              <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-normal max-w-[150px] text-center pointer-events-none z-20">
+                导出EPUB（含全部留言）
               </div>
             </div>
             {item.doc !== undefined ? (

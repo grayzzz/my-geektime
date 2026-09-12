@@ -60,7 +60,32 @@ export const retryTask = (params: { pid?: string; ids?: string[]; retry?: boolea
   return request.post('/task/retry', params)
 }
 
-export const exportTask = (params: { pid: string; type: string }) => {
+export const exportTask = (params: { pid: string; type: string; comments?: string }) => {
+  // epub 与 markdown 一样返回二进制流，但生成过程需要下载并内嵌图片，耗时明显更长，
+  // 因此必须作为独立分支插在 markdown 判断之前，使用更长的超时（避免落到默认超时分支）
+  if (params.type === 'epub') {
+    return request
+      .get<any, Blob>('/task/export', {
+        params,
+        responseType: 'blob',
+        timeout: 900000,
+      })
+      .then(async (blob) => {
+        // 边界防护：导出接口在 switch 里没有匹配到 type 时会直接结束函数，
+        // 返回「HTTP 200 + 空 body」。axios 会把它当成成功，浏览器随即下载一个
+        // 0 字节文件，而界面还提示"导出成功"——极易被误判为导出完成。
+        // 必须在这里显式拦掉，把问题暴露出来。
+        if (!blob || blob.size === 0) {
+          throw new Error('导出失败：服务端返回了空响应，请确认后端已重新编译并重启')
+        }
+        // zip 魔数校验（PK），避免把报错文本或 HTML 错误页当成 epub 下载
+        const head = new Uint8Array(await (blob as Blob).slice(0, 2).arrayBuffer())
+        if (head[0] !== 0x50 || head[1] !== 0x4b) {
+          throw new Error('导出失败：服务端返回的内容不是有效的 EPUB 文件')
+        }
+        return blob
+      })
+  }
   if (params.type === 'markdown') {
     return request.get<any, Blob>('/task/export', { params, responseType: 'blob' })
   }

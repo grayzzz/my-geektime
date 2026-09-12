@@ -65,6 +65,7 @@ func (app *App) Run() {
 	subCLI.NewSubCommandFunction("redirect", "check geektime redirect url", cliApp.Redirect)
 	subCLI.NewSubCommandFunction("backup", "backup database data to tar.gz", cliApp.Backup)
 	subCLI.NewSubCommandFunction("restore", "restore database data from backup tar.gz", cliApp.Restore)
+	subCLI.NewSubCommandFunction("epub", "export cached courses as epub ebooks", cliApp.Epub)
 	if err := c.Run(); err != nil {
 		fmt.Println(color.Red(err.Error()))
 	}

@@ -148,4 +148,6 @@ type TaskExportRequest struct {
 	Pid string `json:"pid,omitempty" form:"pid" binding:"required"`
 	// type
 	Type string `json:"type,omitempty" form:"type" binding:"required"`
+	// comments 评论模式（仅 type=epub 生效）：all（默认，全部留言）| hot（每篇 20 条按赞）| 0（不含）
+	Comments string `json:"comments,omitempty" form:"comments"`
 }
