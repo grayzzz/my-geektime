@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { getProductList, downloadProduct, ProductItem, getArticleInfo } from '@/api/product'
 import { getDictTree } from '@/api/dict'
+import { dedupCategories } from '@/utils/category'
 import { Button, Card, Pagination, Select, Spinner, Drawer, Modal } from '@/components/ui'
 import { useAuthStore } from '@/store/auth'
 import { useToast } from '@/components/ui/Toast'
@@ -93,18 +94,7 @@ export const LessonList: React.FC = () => {
       const res = await getDictTree('geektimeCategory')
       if (res) {
         const categories = res.geektimeCategory || []
-        const directions = categories
-          .filter((item: any) => item.label !== '全部')
-          .map((item: any) => ({
-            label: item.label,
-            value: Number(item.value),
-            children: item.children
-              ?.filter((c: any) => c.label !== '全部')
-              .map((c: any) => ({
-                label: c.label,
-                value: Number(c.value),
-              })) || [],
-          }))
+        const directions = dedupCategories(categories)
         setGeektimeCategory(directions)
         setGeektimeDirection(directions)
       }

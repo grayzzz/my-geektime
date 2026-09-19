@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import { getPvipList, downloadProduct, ProductItem } from '@/api/product'
 import { getDictTree } from '@/api/dict'
+import { dedupCategories } from '@/utils/category'
 import { Button, Card, Pagination, Select, Input, Spinner, Drawer, Modal } from '@/components/ui'
 import { ArticleList } from '@/components/ArticleList'
 import { useAuthStore } from '@/store/auth'
@@ -108,18 +109,7 @@ export const PvipList: React.FC = () => {
       const res = await getDictTree('geektimeCategory')
       if (res) {
         const categories = res.geektimeCategory || []
-        const directions = categories
-          .filter((item: any) => item.label !== '全部')
-          .map((item: any) => ({
-            label: item.label,
-            value: Number(item.value),
-            children: item.children
-              ?.filter((c: any) => c.label !== '全部')
-              .map((c: any) => ({
-                label: c.label,
-                value: Number(c.value),
-              })) || [],
-          }))
+        const directions = dedupCategories(categories)
         setGeektimeCategory(directions)
         setGeektimeDirection(directions)
       }

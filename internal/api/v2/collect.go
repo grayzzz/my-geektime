@@ -2,7 +2,6 @@ package v2
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/gin-gonic/gin"
@@ -36,7 +35,24 @@ func (t *Collect) Create(c *gin.Context) {
 		return
 	}
 	err := global.DB.Transaction(func(tx *gorm.DB) error {
+		var tasks []model.Task
+		if err := tx.Model(&model.Task{}).
+			Where("task_id IN ? AND deleted_at = 0", req.Ids).
+			Find(&tasks).Error; err != nil {
+			return err
+		}
+		taskMap := make(map[string]*model.Task, len(tasks))
+		for i := range tasks {
+			taskMap[tasks[i].TaskId] = &tasks[i]
+		}
 		for _, id := range req.Ids {
+			t, ok := taskMap[id]
+			if !ok {
+				return fmt.Errorf("任务不存在: %s", id)
+			}
+			if t.TaskType != service.TASK_TYPE_PRODUCT {
+				return fmt.Errorf("只能收藏课程任务，不能收藏章节任务: %s", id)
+			}
 			item := &model.Collect{
 				Uid:         identity,
 				CollectId:   id,
@@ -90,24 +106,42 @@ func (t *Collect) List(c *gin.Context) {
 		global.FAIL(c, "fail.msg", err.Error())
 		return
 	}
+	var collectTaskIds []string
+	for _, l := range ls {
+		if l.CollectType == collect.CollectTask {
+			collectTaskIds = append(collectTaskIds, l.CollectId)
+		}
+	}
+	collectTaskMap := make(map[string]*model.Task)
+	var collectTasks []*model.Task
+	if len(collectTaskIds) > 0 {
+		global.DB.Model(&model.Task{}).
+			Where("task_id IN ?", collectTaskIds).
+			Where("deleted_at = ?", 0).
+			Order("id DESC").
+			Find(&collectTasks)
+		for _, x := range collectTasks {
+			if _, exists := collectTaskMap[x.TaskId]; !exists {
+				collectTaskMap[x.TaskId] = x
+			}
+		}
+	}
+	statsMap := service.BatchSyncProductStatistics(collectTasks)
+
 	for _, l := range ls {
 		row := collect.Collect{
 			Collect: l,
 		}
 		if l.CollectType == collect.CollectTask {
-			var x *model.Task
-			if err := global.DB.Model(&model.Task{}).
-				Where("task_id = ?", l.CollectId).
-				Where("deleted_at = ?", 0).
-				Order("id DESC").First(&x).Error; err != nil {
-				// record not found, delete collect
-				if errors.Is(err, gorm.ErrRecordNotFound) {
-					global.DB.Where("id = ?", l.Id).Delete(&model.Collect{})
-				}
+			x, ok := collectTaskMap[l.CollectId]
+			if !ok {
+				global.DB.Where("id = ?", l.Id).Delete(&model.Collect{})
 				continue
 			}
 			var statistics task.TaskStatistics
-			if len(x.Statistics) > 0 {
+			if x.TaskType == service.TASK_TYPE_PRODUCT {
+				statistics = statsMap[x.TaskId]
+			} else if len(x.Statistics) > 0 {
 				_ = json.Unmarshal(x.Statistics, &statistics)
 			}
 			taskRow := task.Task{

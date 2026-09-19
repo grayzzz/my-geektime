@@ -3,9 +3,12 @@ package cli
 import (
 	"context"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/zkep/my-geektime/internal/types/sys_dict"
 )
 
 type Flags struct {
@@ -45,4 +48,22 @@ func (app *App) Config(f *ConfigFlags) error {
 	}
 	fmt.Printf("successfully created %s\n", f.Config)
 	return nil
+}
+
+func (app *App) loadTagData() (sys_dict.TagData, error) {
+	var tagData sys_dict.TagData
+	if tagRaw, err := os.ReadFile("web/pages/tags.json"); err == nil {
+		if err = json.Unmarshal(tagRaw, &tagData); err != nil {
+			return tagData, err
+		}
+	} else if tagRaw, err := app.assets.ReadFile("web/tags.json"); err != nil {
+		return tagData, err
+	} else {
+		var tags []sys_dict.Tag
+		if err := json.Unmarshal(tagRaw, &tags); err != nil {
+			return tagData, err
+		}
+		tagData.Data = tags
+	}
+	return tagData, nil
 }

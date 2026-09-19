@@ -11,6 +11,7 @@ import { downloadFileFromBlob } from '@/utils/request'
 import { createCollect } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
 import { getCourseProgressCached } from '@/api/progress'
+import { dedupCategories } from '@/utils/category'
 import { Button, Card, Select, Input, Spinner, Modal } from '@/components/ui'
 import { TaskCard } from '@/components/TaskCard'
 import { LessonDrawer } from '@/components/LessonDrawer'
@@ -169,18 +170,7 @@ export const TaskList: React.FC = () => {
       const res = await getDictTree('geektimeCategory,collectCategory')
       if (res) {
         const categories = res.geektimeCategory || []
-        const directions = categories
-          .filter((item: any) => item.label !== '全部')
-          .map((item: any) => ({
-            label: item.label,
-            value: Number(item.value),
-            children: item.children
-              ?.filter((c: any) => c.label !== '全部')
-              .map((c: any) => ({
-                label: c.label,
-                value: Number(c.value),
-              })) || [],
-          }))
+        const directions = dedupCategories(categories)
         setGeektimeCategory(directions)
         setGeektimeDirection(directions)
         setCollectCategory(res.collectCategory || [])

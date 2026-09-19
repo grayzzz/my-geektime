@@ -105,6 +105,8 @@ func (app *App) Label(f *LabelFlags) error {
 		if cookies := os.Getenv("cookies"); len(cookies) > 0 {
 			accessToken = cookies
 		}
+	} else if len(cfg.Site.Cookie.Geektime) > 0 {
+		accessToken = cfg.Site.Cookie.Geektime
 	} else {
 		var u model.User
 		if err = global.DB.
@@ -195,6 +197,9 @@ func (app *App) Label(f *LabelFlags) error {
 			tagData := sys_dict.TagData{Data: tags}
 			raw, _ = json.MarshalIndent(tagData, "", "    ")
 			tagFilePath := filepath.Join("web/pages", "tags.json")
+			if err = os.MkdirAll(filepath.Dir(tagFilePath), os.ModePerm); err != nil {
+				return err
+			}
 			if err = os.WriteFile(tagFilePath, raw, os.ModePerm); err != nil {
 				return err
 			}

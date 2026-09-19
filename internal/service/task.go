@@ -37,6 +37,174 @@ var ALLStatus = []int{
 	TASK_STATUS_ERROR,
 }
 
+func SyncProductStatistics(x *model.Task) (task.TaskStatistics, int32) {
+	var statistics task.TaskStatistics
+	if len(x.Statistics) > 0 {
+		_ = json.Unmarshal(x.Statistics, &statistics)
+	}
+	if statistics.Items == nil {
+		statistics.Items = make(map[int]int, 5)
+	}
+
+	type statusCount struct {
+		Status int `gorm:"column:status"`
+		Count  int `gorm:"column:count"`
+	}
+	var results []statusCount
+	global.DB.Model(&model.Task{}).
+		Select("status, count(*) as count").
+		Where("task_pid = ? AND deleted_at = 0", x.TaskId).
+		Group("status").
+		Scan(&results)
+
+	for _, item := range ALLStatus {
+		statistics.Items[item] = 0
+	}
+	var pendingCount, runningCount, errorCount int
+	for _, r := range results {
+		statistics.Items[r.Status] = r.Count
+		switch r.Status {
+		case TASK_STATUS_PENDING:
+			pendingCount = r.Count
+		case TASK_STATUS_RUNNING:
+			runningCount = r.Count
+		case TASK_STATUS_ERROR:
+			errorCount = r.Count
+		}
+	}
+	statistics.Count = pendingCount + runningCount + errorCount + statistics.Items[TASK_STATUS_FINISHED]
+
+	status := int32(TASK_STATUS_FINISHED)
+	if pendingCount > 0 {
+		status = int32(TASK_STATUS_PENDING)
+	}
+	if runningCount > 0 {
+		status = int32(TASK_STATUS_PENDING)
+	}
+	if errorCount > 0 {
+		status = int32(TASK_STATUS_ERROR)
+	}
+
+	raw, _ := json.Marshal(statistics)
+	if status != x.Status || string(raw) != string(x.Statistics) {
+		global.DB.Model(&model.Task{}).Where("id = ?", x.Id).
+			Updates(map[string]interface{}{
+				"status":     status,
+				"statistics": raw,
+			})
+		x.Status = status
+		x.Statistics = raw
+	}
+
+	return statistics, status
+}
+
+func BatchSyncProductStatistics(tasks []*model.Task) map[string]task.TaskStatistics {
+	result := make(map[string]task.TaskStatistics, len(tasks))
+	if len(tasks) == 0 {
+		return result
+	}
+
+	taskIds := make([]string, 0, len(tasks))
+	for _, t := range tasks {
+		if t.TaskType != TASK_TYPE_PRODUCT {
+			continue
+		}
+		taskIds = append(taskIds, t.TaskId)
+	}
+	if len(taskIds) == 0 {
+		return result
+	}
+
+	type statusCount struct {
+		TaskPid string `gorm:"column:task_pid"`
+		Status  int    `gorm:"column:status"`
+		Count   int    `gorm:"column:count"`
+	}
+	var results []statusCount
+	global.DB.Model(&model.Task{}).
+		Select("task_pid, status, count(*) as count").
+		Where("task_pid IN ? AND deleted_at = 0", taskIds).
+		Group("task_pid, status").
+		Scan(&results)
+
+	countMap := make(map[string]map[int]int)
+	for _, r := range results {
+		if countMap[r.TaskPid] == nil {
+			countMap[r.TaskPid] = make(map[int]int)
+		}
+		countMap[r.TaskPid][r.Status] = r.Count
+	}
+
+	type updateItem struct {
+		id         int64
+		status     int32
+		statistics json.RawMessage
+	}
+	var updates []updateItem
+
+	for _, t := range tasks {
+		if t.TaskType != TASK_TYPE_PRODUCT {
+			continue
+		}
+		var statistics task.TaskStatistics
+		if len(t.Statistics) > 0 {
+			_ = json.Unmarshal(t.Statistics, &statistics)
+		}
+		if statistics.Items == nil {
+			statistics.Items = make(map[int]int, 5)
+		}
+
+		counts := countMap[t.TaskId]
+		var pendingCount, runningCount, errorCount int
+		for _, s := range ALLStatus {
+			c := counts[s]
+			statistics.Items[s] = c
+			switch s {
+			case TASK_STATUS_PENDING:
+				pendingCount = c
+			case TASK_STATUS_RUNNING:
+				runningCount = c
+			case TASK_STATUS_ERROR:
+				errorCount = c
+			}
+		}
+		statistics.Count = pendingCount + runningCount + errorCount + statistics.Items[TASK_STATUS_FINISHED]
+
+		status := int32(TASK_STATUS_FINISHED)
+		if pendingCount > 0 {
+			status = int32(TASK_STATUS_PENDING)
+		}
+		if runningCount > 0 {
+			status = int32(TASK_STATUS_PENDING)
+		}
+		if errorCount > 0 {
+			status = int32(TASK_STATUS_ERROR)
+		}
+
+		raw, _ := json.Marshal(statistics)
+		if status != t.Status || string(raw) != string(t.Statistics) {
+			updates = append(updates, updateItem{t.Id, status, raw})
+			t.Status = status
+			t.Statistics = raw
+		}
+
+		result[t.TaskId] = statistics
+	}
+
+	if len(updates) > 0 {
+		for _, u := range updates {
+			global.DB.Model(&model.Task{}).Where("id = ?", u.id).
+				Updates(map[string]interface{}{
+					"status":     u.status,
+					"statistics": u.statistics,
+				})
+		}
+	}
+
+	return result
+}
+
 var Replaces = map[string]string{
 	"/":  "-",
 	"|":  "-",

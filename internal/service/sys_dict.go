@@ -146,6 +146,13 @@ func CollectCategoryInitialize(ctx context.Context, tagData sys_dict.TagData) er
 		Transaction(func(tx *gorm.DB) error {
 			for _, category := range collectCategories {
 				info := model.SysDict{Base: &category}
+				var existing model.SysDict
+				found := tx.Model(&model.SysDict{}).
+					Where("pkey = ? AND name = ? AND deleted = 0", category.Pkey, category.Name).
+					First(&existing).Error == nil
+				if found {
+					continue
+				}
 				if err := tx.Model(&model.SysDict{}).
 					Where(&model.SysDict{
 						Base: &model.SysDictBase{
@@ -212,6 +219,13 @@ func GeektimeCategory(ctx context.Context, tagData sys_dict.TagData) error {
 	err := global.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		for _, category := range categories {
 			info := model.SysDict{Base: &category}
+			var existing model.SysDict
+			found := tx.Model(&model.SysDict{}).
+				Where("pkey = ? AND name = ? AND deleted = 0", category.Pkey, category.Name).
+				First(&existing).Error == nil
+			if found {
+				continue
+			}
 			if err := tx.Model(&model.SysDict{}).
 				Where(&model.SysDict{
 					Base: &model.SysDictBase{

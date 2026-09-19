@@ -61,6 +61,8 @@ func (app *App) Redirect(f *RedirectFlags) error {
 		if cookies := os.Getenv("cookies"); len(cookies) > 0 {
 			accessToken = cookies
 		}
+	} else if len(cfg.Site.Cookie.Geektime) > 0 {
+		accessToken = cfg.Site.Cookie.Geektime
 	} else {
 		var u model.User
 		if err = global.DB.

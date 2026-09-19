@@ -69,6 +69,8 @@ func (app *App) Data(f *DataFlags) error {
 		if cookies := os.Getenv("cookies"); len(cookies) > 0 {
 			accessToken = cookies
 		}
+	} else if len(cfg.Site.Cookie.Geektime) > 0 {
+		accessToken = cfg.Site.Cookie.Geektime
 	} else {
 		var u model.User
 		if err = global.DB.
@@ -96,17 +98,13 @@ func (app *App) Data(f *DataFlags) error {
 	if err = service.Authority(accessToken, after); err != nil {
 		return err
 	}
-	tagRaw, err := app.assets.ReadFile("web/pages/tags.json")
+	tagData, err := app.loadTagData()
 	if err != nil {
-		return err
-	}
-	var tagData sys_dict.TagData
-	if err = json.Unmarshal(tagRaw, &tagData); err != nil {
 		return err
 	}
 	var allTask []*model.Task
 	if err = global.DB.Model(&model.Task{}).
-		Select([]string{"id", "other_id", "other_type", "other_tag", "other_form", "other_group"}).
+		Select([]string{"id", "task_id", "other_id", "other_type", "other_tag", "other_form", "other_group"}).
 		Where("task_pid=?", "").
 		Find(&allTask).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		return err

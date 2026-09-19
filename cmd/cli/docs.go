@@ -141,12 +141,8 @@ func (app *App) LocalDoc(f *DocsFlags) error {
 	if err := initialize.GPool(app.ctx); err != nil {
 		return err
 	}
-	tagRaw, err := app.assets.ReadFile("web/pages/tags.json")
+	tagData, err := app.loadTagData()
 	if err != nil {
-		return err
-	}
-	var tagData sys_dict.TagData
-	if err = json.Unmarshal(tagRaw, &tagData); err != nil {
 		return err
 	}
 	tagMap := make(map[int32]sys_dict.Option, len(tagData.Data))
