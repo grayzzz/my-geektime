@@ -48,6 +48,7 @@ web/index.html
 .cursor/
 .aider*
 .continue/
+.omp/
 .workbuddy/
 
 .cody/
