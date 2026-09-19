@@ -80,6 +80,11 @@ model: sonnet
    ```
 
    > 注：原生 exe 配 `nohup ... &` 可存活，但 `npm` / `vite` 这类脚本仍会被回收，统一用常驻方式最稳。
+   > ⚠️ **常驻后台任务必须「无时限」派遣** —— Claude Code 的 `run_in_background=true` 无时限，服务可一直跑；
+   > 但其它 harness（如 2026-09-16 实测的 omp 系）对后台 bash 任务默认挂 **300 秒 job deadline**：
+   > 到点整棵进程树（`my-geektime.exe` / `vite` 及其 node 子进程）被**静默回收**，端口瞬间关闭，
+   > 且只发一条「任务完成/超时」通知，不会提示服务被杀。派遣启动命令时务必显式禁用时限
+   > （omp 系：`bash` 参数 `async: true` + `timeout: 0`）。
 
 4. **`taskkill` 必须前置 `MSYS2_ARG_CONV_EXCL='*'`** —— 该 shim shell 下 MSYS 的 `//` → `/` 路径转换不生效，
    直接写 `taskkill //F //PID` 会报 `错误: 无效参数/选项 - '//F'`，命令静默失败、端口不释放。已验证可用的写法：
@@ -358,17 +363,64 @@ done
 
 ## 健康校验（启动完成后建议执行）
 
+> ⚠️ **不能只看状态码**：后端注册了 `e.NoRoute` 兜底（见 `internal/router/router.go`），
+> 任何不带扩展名且未命中的路径都会返回 **200 + SPA 的 `index.html`**。
+> 实测：`/v2/base/setting`（旧文档里写的地址）**在项目中并不存在**，请求它会拿到首页 HTML 和 200 ——
+> 这种「假成功」无法区分后端是活着还是挂了。**必须用真实注册的路由，并校验响应体是 JSON。**
+> （同类教训参见之前 EPUB 导出「提示成功但下载 0 字节」。）
+>
+> ⚠️ **第二个坑：后端能在数据库完全不可用的情况下照常启动并对外服务。**
+> 2026-09-16 实测：MySQL 容器（Docker Desktop 退出）已死、3326 拒绝连接，8090 依然正常监听并返回 JSON，
+> 只是 `backend.log` 里所有查询都在刷 `dial tcp 127.0.0.1:3326: connectex: ... actively refused it`
+> （来源 `internal/handler/task/download.go`、`internal/service/sys_dict.go`）。
+> 所以「进程活着」「返回 JSON」都**不等于**「数据库可用」—— 校验必须打到会真正查库的路由。
+
 ```bash
 export PATH="/usr/bin:/bin:/c/Windows/System32:$PATH"
 for p in 3326 8090 3000; do
   (echo > /dev/tcp/127.0.0.1/$p) 2>/dev/null && echo "PORT_$p=OPEN" || echo "PORT_$p=CLOSED"
 done
-# ⚠️ curl 丢弃正文必须写 `-o NUL`，不要写 `-o /dev/null`：
-# 本环境 `-o /dev/null` 会让 curl 以退出码 23（写正文失败）结束，即使 HTTP 200 也一样，
-# 会被误判成校验失败。实测：`-o /dev/null` → exit 23；`-o NUL` → exit 0。
-curl -s -o NUL -w "backend  -> HTTP %{http_code}\n" --max-time 10 http://127.0.0.1:8090/v2/base/setting
-curl -s -o NUL -w "frontend -> HTTP %{http_code}\n" --max-time 10 http://127.0.0.1:3000/
+
+# 后端：必须用「公开 + 真的会查库」的路由。全项目只有 3 个公开路由会碰数据库，
+# 其中最省事的是 POST /v2/base/login（router/base.go:12 → base.go:49 的 global.DB...First()）。
+# ⚠️ 不要用 /v2/setting/query 做健康校验：
+#    它是 private 路由，JWT 中间件在 handler 之前就把它拦成 400 {"msg":"token is expired"}，
+#    响应体是 JSON 也含 "status"，但它**根本没走到数据库** —— 只能证明进程活着，
+#    无法证明 MySQL 可用（2026-09-16 实测：8090 正常返回该 JSON 的同时，3326 已死、
+#    backend.log 里所有 DB 查询都在报 dial tcp refused）。
+resp=$(curl -s --max-time 10 -X POST http://127.0.0.1:8090/v2/base/login \
+  -H "Content-Type: application/json" \
+  -d '{"type":"name","data":{"account":"probe0000","password":"probe0000"}}')
+# DB 通  -> 正常 JSON（账号不存在，返回 base.login.error 一类业务错误）
+# DB 断  -> 响应里会带 "dial tcp"/"refused" 等驱动层错误
+case "$resp" in
+  *'"status"'*'dial tcp'*|*refused*|*Refused*)
+     echo "backend  -> FAIL: 进程活着但**数据库不可达**"; echo "  实际响应: $(printf '%s' "$resp" | head -c 200)" ;;
+  *'"status"'*) echo "backend  -> OK (进程 + 数据库均通)" ;;
+  *) echo "backend  -> FAIL: 响应不是后端 JSON，可能只拿到了 SPA 首页或服务未起"
+     echo "  实际响应: $(printf '%s' "$resp" | head -c 120)" ;;
+esac
+
+# 前端：返回 SPA 首页即正常（HTML）
+curl -s -o NUL -w "frontend -> HTTP %{http_code} %{content_type}\n" --max-time 10 http://127.0.0.1:3000/
+
+# 前端 dev server 代理到后端是否通（同样用查库路由，别用 setting/query）
+resp2=$(curl -s --max-time 10 -X POST http://127.0.0.1:3000/v2/base/login \
+  -H "Content-Type: application/json" \
+  -d '{"type":"name","data":{"account":"probe0000","password":"probe0000"}}')
+case "$resp2" in
+  *'"status"'*'dial tcp'*|*refused*|*Refused*) echo "via-vite -> FAIL: 代理通了但数据库不可达" ;;
+  *'"status"'*) echo "via-vite -> OK (代理通，DB 通)" ;;
+  *) echo "via-vite -> FAIL: 前端代理没到后端" ;;
+esac
 ```
+
+> ⚠️ curl 丢弃正文必须写 `-o NUL`，不要写 `-o /dev/null`：
+> 本环境 `-o /dev/null` 会让 curl 以退出码 23（写正文失败）结束，即使 HTTP 200 也一样，
+> 会被误判成校验失败。实测：`-o /dev/null` → exit 23；`-o NUL` → exit 0。
+>
+> 附：Docker 发布的端口（如 3326）**可能不出现在 `netstat` 里**（实测 3326 明明 OPEN，
+> `netstat -ano | grep :3326` 却零记录）—— 所以端口探测以 `/dev/tcp` 为准，别拿 netstat 下结论。
 
 ## 验证步骤（启动完成后）
 
