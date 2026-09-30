@@ -11,6 +11,7 @@ import (
 	"github.com/zkep/my-geektime/internal/model"
 	"github.com/zkep/my-geektime/internal/types/geek"
 	"github.com/zkep/my-geektime/internal/types/sys_dict"
+	"github.com/zkep/my-geektime/libs/zhttp"
 	"go.uber.org/zap"
 )
 
@@ -23,6 +24,7 @@ const (
 	ArticleCommentDiscussionURL = "https://time.geekbang.org/serv/discussion/v1/root_list"
 	SearchURL                   = "https://time.geekbang.org/serv/v3/search"
 	ColumnInfoURL               = "https://time.geekbang.org/serv/v3/column/info"
+	ProductInfoURL              = "https://time.geekbang.org/serv/v3/product/info"
 )
 
 func GetArticleInfo(ctx context.Context, accessToken string,
@@ -130,15 +132,18 @@ func GetPvipProduct(ctx context.Context, accessToken string,
 		go func() {
 			for _, value := range resp.Data.Products {
 				itemRaw, _ := json.Marshal(value)
+				pid := fmt.Sprintf("%d", value.ID)
 				info := model.Product{
-					Pid:        fmt.Sprintf("%d", value.ID),
-					Title:      value.Share.Title,
-					Cover:      value.Share.Cover,
-					Raw:        itemRaw,
+					Pid:   pid,
+					Title: value.Share.Title,
+					Cover: value.Share.Cover,
+					Raw:   itemRaw,
+					// 类型/形式只认课程自身的布尔位，不用请求参数（见 sys_dict.ResolveProductType）
+					OtherType: sys_dict.ResolveProductType(value.IsCore, value.IsOpencourse,
+						value.IsMentor, value.IsDailylesson, value.IsQconp, value.IsColumn),
+					OtherForm:  sys_dict.ResolveProductForm(value.ProductForm, value.IsVideo, value.IsAudio),
+					OtherGroup: resolveOtherGroup(pid, value.Labels),
 					Source:     value.Type,
-					OtherType:  req.ProductType,
-					OtherForm:  req.ProductForm,
-					OtherGroup: req.Direction,
 					OtherTag:   req.Tag,
 				}
 				if err := global.DB.
@@ -175,19 +180,19 @@ func GetProduct(ctx context.Context, accessToken string,
 		go func() {
 			for _, value := range resp.Data.List {
 				itemRaw, _ := json.Marshal(value)
+				pid := fmt.Sprintf("%d", value.ID)
 				info := model.Product{
-					Pid:        fmt.Sprintf("%d", value.ID),
-					Title:      value.Share.Title,
-					Cover:      value.Share.Cover,
-					Raw:        itemRaw,
+					Pid:   pid,
+					Title: value.Share.Title,
+					Cover: value.Share.Cover,
+					Raw:   itemRaw,
+					// 类型/形式只认课程自身的布尔位，不用请求参数（见 sys_dict.ResolveProductType）
+					OtherType: sys_dict.ResolveProductType(value.IsCore, value.IsOpencourse,
+						value.IsMentor, value.IsDailylesson, value.IsQconp, value.IsColumn),
+					OtherForm:  sys_dict.ResolveProductForm(value.ProductForm, value.IsVideo, value.IsAudio),
+					OtherGroup: resolveOtherGroup(pid, value.Labels),
 					Source:     value.Type,
-					OtherForm:  2,
-					OtherGroup: req.Direction,
 					OtherTag:   req.LabelID,
-				}
-				otherType, ok := sys_dict.ProductTypes[req.Type]
-				if ok {
-					info.OtherType = otherType.Value
 				}
 				if err := global.DB.
 					Model(&model.Product{}).
@@ -202,6 +207,106 @@ func GetProduct(ctx context.Context, accessToken string,
 	}
 	err := Request(ctx, http.MethodPost, ProductListURL, bytes.NewBuffer(raw), accessToken, after)
 	if err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
+// resolveOtherGroup 解析课程的「真实方向」并写入 products.other_group。
+//
+// 方向只能从上游返回的 labels 里取（见 sys_dict.ResolveDirection）——
+// 曾经这里写的是 req.Direction（请求的筛选参数），而该参数带 `json:"-"` 从不发给极客，
+// 于是「按方向筛选」实际返回的是全量列表，再把整页课程统统标成同一个方向。
+// 典型后果：用户没选方向（direction=0）时浏览过的课程，方向会被清成 0，
+// 前端「我的课程」显示 `-`，且按任何方向都筛不出来。
+//
+// 另外，上游偶发不返回 labels 时保留库中已有值，避免把方向误清 0。
+//
+// ⚠️ 性能：labels 为空时这里会多打一条 SELECT（每门课一次，即 N+1）。
+// 实测存量 763 行 products 中 labels 非空 695 行（不触发）、raw 无 labels 字段 68 行（触发），
+// 一页 20 门最多几次，故不做批量预取。若将来列表页变大、或上游普遍不给 labels，
+// 应改为调用方一次性 WHERE pid IN (...) 预取后传进来。
+func resolveOtherGroup(pid string, labels []int) int32 {
+	if len(labels) > 0 {
+		return sys_dict.ResolveDirection(labels)
+	}
+	var exist model.Product
+	if err := global.DB.
+		Model(&model.Product{}).
+		Select("other_group").
+		Where(&model.Product{Pid: pid}).
+		First(&exist).Error; err == nil {
+		return exist.OtherGroup
+	}
+	return 0
+}
+
+// ResolveTypeForm 从存下来的上游原始 JSON 里还原「课程类型 / 课程形式」。
+//
+// 用途：products / tasks 里 2026-10-01 之前写入的行，other_type / other_form 取的都是
+// 请求筛选参数（默认 0），需要按 raw 里自带的布尔位重算；Download 也会用它兜底。
+// 解析不出时返回 (0, 0)，调用方应保留原值。
+func ResolveTypeForm(raw []byte) (int32, int32) {
+	if len(raw) == 0 {
+		return 0, 0
+	}
+	var v struct {
+		ProductForm   int32 `json:"product_form"`
+		IsVideo       bool  `json:"is_video"`
+		IsAudio       bool  `json:"is_audio"`
+		IsCore        bool  `json:"is_core"`
+		IsOpencourse  bool  `json:"is_opencourse"`
+		IsMentor      bool  `json:"is_mentor"`
+		IsDailylesson bool  `json:"is_dailylesson"`
+		IsQconp       bool  `json:"is_qconp"`
+		IsColumn      bool  `json:"is_column"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return 0, 0
+	}
+	return sys_dict.ResolveProductType(v.IsCore, v.IsOpencourse, v.IsMentor,
+			v.IsDailylesson, v.IsQconp, v.IsColumn),
+		sys_dict.ResolveProductForm(v.ProductForm, v.IsVideo, v.IsAudio)
+}
+
+// GetProductInfo 按 pid 取课程详情，只读、不写库。
+//
+// 存在意义：`/serv/v3/column/info`（Download 里的兜底）**不返回 labels**，
+// 也没有 is_mentor / is_column / is_qconp / product_form，所以靠它拿不到方向、
+// 也判不出线下大会与社区课。而 `/serv/v3/product/info` 一次就能给全
+// （labels + 全套 is_* 布尔位 + product_form，实测 2026-10-01 覆盖体系课/公开课/
+// 线下大会/社区课，各类均有效；线下大会与社区课的 labels 本来就是空数组）。
+//
+// 契约：**拿不到数据一律返回非 nil error**（含上游的两种静默失败，见下）。
+// 调用方应据此跳过兜底，不要用返回值里的零值去当"解析结果"。
+func GetProductInfo(ctx context.Context, accessToken string, pid int64) (*geek.ProductInfoResponse, error) {
+	raw, _ := json.Marshal(geek.ProductInfoRequest{ID: pid})
+	var resp geek.ProductInfoResponse
+	after := func(raw []byte) error {
+		if err := json.Unmarshal(raw, &resp); err != nil {
+			global.LOG.Error("GetProductInfo", zap.Error(err))
+			return err
+		}
+		if resp.Code != 0 {
+			global.LOG.Warn("GetProductInfo", zap.Any("error", resp.Error))
+			// 必须把错误抛出去：调用方（Download）靠 err 判断有没有真的拿到数据。
+			// 早先这里 return nil，Download 会当成成功，拿零值 info 去算方向/类型/形式（全是 0），
+			// 兜底静默失效。业务错误（无权限 / cookie 过期 / 参数不对）重试也没用，
+			// 故用 BreakRetryError 让 DoWithRetry 立刻返回，不做无谓重试。
+			return zhttp.BreakRetryError(
+				fmt.Errorf("GetProductInfo code=%d error=%v", resp.Code, resp.Error))
+		}
+		// 第二种静默失败：code=0 但 info 是空壳（id=0）。
+		// 实测 pid=999999999 -> {"code":0,"data":{"info":{"id":0}}}，不报错。
+		// 不识别它的话，调用方同样会拿零值去算方向/类型/形式。
+		if resp.Data.Info.ID <= 0 {
+			global.LOG.Warn("GetProductInfo empty info", zap.Int64("pid", pid))
+			return zhttp.BreakRetryError(
+				fmt.Errorf("GetProductInfo empty info, pid=%d", pid))
+		}
+		return nil
+	}
+	if err := Request(ctx, http.MethodPost, ProductInfoURL, bytes.NewBuffer(raw), accessToken, after); err != nil {
 		return nil, err
 	}
 	return &resp, nil

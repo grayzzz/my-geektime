@@ -130,6 +130,7 @@ type ProductBase struct {
 	IsOpencourse  bool           `json:"is_opencourse,omitempty"`
 	IsQconp       bool           `json:"is_qconp,omitempty"`
 	IsMentor      bool           `json:"is_mentor,omitempty"`
+	ProductForm   int32          `json:"product_form,omitempty"`
 	NavID         int            `json:"nav_id,omitempty"`
 	TimeNotSale   int            `json:"time_not_sale,omitempty"`
 	Title         string         `json:"title,omitempty"`
@@ -375,6 +376,39 @@ type DowloadResponse struct {
 	JobID string `json:"job_id,omitempty"`
 }
 
+// ProductInfoRequest 是 /serv/v3/product/info 的请求体。
+// ⚠️ 参数名是 `id`，不是 `product_id` —— 传 product_id 会返回 id=0 的空壳（实测 2026-10-01）。
+type ProductInfoRequest struct {
+	ID int64 `json:"id"`
+}
+
+// ProductInfoDetail 只声明「补数据」需要的字段。
+// 刻意不整体复用 ProductBase：上游 info 里其它字段一旦类型不符，
+// 整体 json.Unmarshal 会直接失败，而这些字段我们并不需要。
+type ProductInfoDetail struct {
+	ID            int    `json:"id,omitempty"`
+	Labels        []int  `json:"labels,omitempty"`
+	ProductForm   int32  `json:"product_form,omitempty"`
+	Type          string `json:"type,omitempty"`
+	IsCore        bool   `json:"is_core,omitempty"`
+	IsColumn      bool   `json:"is_column,omitempty"`
+	IsMentor      bool   `json:"is_mentor,omitempty"`
+	IsOpencourse  bool   `json:"is_opencourse,omitempty"`
+	IsDailylesson bool   `json:"is_dailylesson,omitempty"`
+	IsQconp       bool   `json:"is_qconp,omitempty"`
+	IsUniversity  bool   `json:"is_university,omitempty"`
+	IsVideo       bool   `json:"is_video,omitempty"`
+	IsAudio       bool   `json:"is_audio,omitempty"`
+}
+
+type ProductInfoResponse struct {
+	Code int `json:"code,omitempty"`
+	Data struct {
+		Info ProductInfoDetail `json:"info,omitempty"`
+	} `json:"data,omitempty"`
+	Error any `json:"error,omitempty"`
+}
+
 type ArticlesListRequest struct {
 	Cid     string `json:"cid" form:"cid" binding:"required"`
 	Size    int    `json:"size" form:"size"`
@@ -559,6 +593,7 @@ type ProductItem struct {
 	IsOpencourse  bool   `json:"is_opencourse,omitempty"`
 	IsQconp       bool   `json:"is_qconp,omitempty"`
 	IsMentor      bool   `json:"is_mentor,omitempty"`
+	ProductForm   int32  `json:"product_form,omitempty"`
 	NavID         int    `json:"nav_id,omitempty"`
 	TimeNotSale   int    `json:"time_not_sale,omitempty"`
 	Title         string `json:"title,omitempty"`

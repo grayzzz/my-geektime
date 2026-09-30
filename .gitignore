@@ -66,3 +66,6 @@ docker/mysql/data/**
 
 # 日志
 *.log
+
+# Vite 打包配置文件的临时产物（dev server 被强制终止时可能残留）
+*.timestamp-*.mjs

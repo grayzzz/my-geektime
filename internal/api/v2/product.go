@@ -12,6 +12,7 @@ import (
 	"github.com/zkep/my-geektime/internal/types/sys_dict"
 	"github.com/zkep/my-geektime/internal/types/task"
 	"github.com/zkep/my-geektime/libs/utils"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -87,6 +88,77 @@ func (p *Product) Download(c *gin.Context) {
 		product.Title = ret.Data.Title
 		product.Cover = ret.Data.Cover.Square
 		product.Raw, _ = json.Marshal(ret.Data)
+		// Pid 必须补上：GetColumnInfo 内部（service/product.go 的 AutoSync）其实已按 pid
+		// 建好了 products 行，而下面回写的守卫是 `if product.Pid != ""`。早先只补
+		// Title/Cover/Raw，会让回写在这条「products 表里本来没有这门课」——也正是最需要
+		// 它的路径上永远不执行（注释里承诺的「免得每次缓存都多打一次上游」根本没兑现）。
+		product.Pid = fmt.Sprintf("%d", req.Pid)
+	}
+	// productWriteback 登记需要回写的 products 行，真正的落库放到下面的同一个事务里。
+	var productWriteback *model.Product
+	// 类型/形式兜底：products.other_type / other_form 为 0 时（历史脏数据，写库时取的是
+	// 请求筛选参数而非课程属性），从存下来的上游原始数据里重算。
+	//
+	// ⚠️ 覆盖边界：三层兜底一律「只在值为 0 时触发」，**非 0 的历史脏值不会被逐步修正**。
+	// 存量已由 2026-10-01 的一次性回填脚本重算过（.workbuddy/backup/fix_type_form.py，
+	// 其口径是「raw 能解析出非 0 值就覆盖」，不是只补 0），实测 products 763 行里
+	// other_group / other_type 与 raw 不一致均为 0 行。这里只负责给增量数据兜底。
+	if (product.OtherType == 0 || product.OtherForm == 0) && len(product.Raw) > 0 {
+		ot, of := service.ResolveTypeForm(product.Raw)
+		if product.OtherType == 0 {
+			product.OtherType = ot
+		}
+		if product.OtherForm == 0 {
+			product.OtherForm = of
+		}
+	}
+	// 方向兜底：products.other_group 为 0 时，尝试从存下来的上游原始数据里解 labels 还原。
+	// products 表若已按 labels 同步过则此处不会生效；仅在历史脏数据（未同步过方向）时补一刀。
+	if product.OtherGroup == 0 && len(product.Raw) > 0 {
+		var labels struct {
+			Labels []int `json:"labels"`
+		}
+		if err := json.Unmarshal(product.Raw, &labels); err == nil {
+			product.OtherGroup = sys_dict.ResolveDirection(labels.Labels)
+		}
+	}
+	// 终极兜底：仍缺方向/类型/形式时，按 pid 调一次 /serv/v3/product/info 补全。
+	//
+	// 关键场景：课程是从**关键字搜索**里点进来的。那条分支走 /serv/v3/search，
+	// 返回的 product 对象只有 12 个字段，既没有 labels 也没有 is_* 布尔位，
+	// 而且不写 products 表；于是上面两层兜底都拿不到方向，缓存进「我的课程」后
+	// 方向会显示 `-`（类型 / 形式同理）。
+	if product.OtherGroup == 0 || product.OtherType == 0 || product.OtherForm == 0 {
+		if detail, err := service.GetProductInfo(c, accessToken, req.Pid); err != nil {
+			global.LOG.Warn("Download.GetProductInfo", zap.Error(err))
+		} else {
+			info := detail.Data.Info
+			if product.OtherGroup == 0 {
+				product.OtherGroup = sys_dict.ResolveDirection(info.Labels)
+			}
+			if product.OtherType == 0 {
+				product.OtherType = sys_dict.ResolveProductType(info.IsCore, info.IsOpencourse,
+					info.IsMentor, info.IsDailylesson, info.IsQconp, info.IsColumn)
+			}
+			if product.OtherForm == 0 {
+				product.OtherForm = sys_dict.ResolveProductForm(info.ProductForm, info.IsVideo, info.IsAudio)
+			}
+			// 顺手把补好的值写回 products 行，免得同一门课每次缓存都要多打一次上游。
+			// 这里只登记；落库放到下面同一个事务里，避免「products 已改、任务没建」的半截状态。
+			if product.Pid != "" {
+				productWriteback = &model.Product{
+					Pid:        product.Pid,
+					Title:      product.Title,
+					Cover:      product.Cover,
+					Raw:        product.Raw,
+					Source:     product.Source,
+					OtherGroup: product.OtherGroup,
+					OtherType:  product.OtherType,
+					OtherForm:  product.OtherForm,
+					OtherTag:   product.OtherTag,
+				}
+			}
+		}
 	}
 	if len(articlesMap) == 0 {
 		var articles []*model.Article
@@ -174,6 +246,17 @@ func (p *Product) Download(c *gin.Context) {
 		job.Bstatus = service.TASK_STATUS_PENDING
 	}
 	err = global.DB.Transaction(func(tx *gorm.DB) error {
+		// products 回写与 job/tasks 同一事务：任一步失败整体回滚，不会留下「元数据已改、任务没建」。
+		// 回写自身失败只记日志、不让请求失败 —— 它只是「省一次上游请求」的优化，
+		// 不该因此让用户的缓存动作报错。
+		if productWriteback != nil {
+			if err := tx.Model(&model.Product{}).
+				Where(&model.Product{Pid: productWriteback.Pid}).
+				Assign(*productWriteback).
+				FirstOrCreate(productWriteback).Error; err != nil {
+				global.LOG.Error("Download.UpdateProduct", zap.Error(err))
+			}
+		}
 		if err := tx.Create(job).Error; err != nil {
 			return err
 		}
@@ -264,6 +347,13 @@ func (p *Product) PvipProductList(c *gin.Context) {
 	}
 	if req.Tag > 0 {
 		req.TagIds = []int32{req.Tag}
+	} else if req.Direction > 0 {
+		// 「课程方向」必须借 tag_ids 传给上游：实测（2026-10-01）
+		// POST https://time.geekbang.org/serv/v4/pvip/product_list 对 direction /
+		// category_id / label_ids 等参数一律忽略（返回结果与不带参数完全相同），
+		// 而方向值本身就是标签体系里的一级标签 id，用 tag_ids 传即生效。
+		// 曾用写法是把 direction 塞进 other_group 写库，既筛不出课又污染了数据。
+		req.TagIds = []int32{req.Direction}
 	}
 	req.Size = req.PerPage
 	req.Prev = req.Page
