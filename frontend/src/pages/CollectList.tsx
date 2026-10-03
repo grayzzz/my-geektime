@@ -5,7 +5,7 @@ import {
   CollectItem,
 } from '@/api/collect'
 import { getDictTree } from '@/api/dict'
-import { retryTask, exportTask, downloadPdfBlob } from '@/api/task'
+import { retryTask, exportTask } from '@/api/task'
 import { getCourseProgressCached } from '@/api/progress'
 import { downloadFileFromBlob } from '@/utils/request'
 import { dedupCategories } from '@/utils/category'
@@ -14,6 +14,7 @@ import { LessonDrawer } from '@/components/LessonDrawer'
 import { useAuthStore } from '@/store/auth'
 import { useToast } from '@/components/ui/Toast'
 import { useLessonList } from '@/hooks/useLessonList'
+import { usePdfExport } from '@/hooks/usePdfExport'
 import {
   FileText,
   FileDown,
@@ -145,7 +146,9 @@ export const CollectList: React.FC = () => {
     }
   }, [])
 
-  const [pdfDownloading, setPdfDownloading] = useState(false)
+  // 课程 PDF 导出：per-task 状态 + 并发队列，替代旧的页面级 boolean 锁
+  // （旧实现 `if (pdfDownloading) return` 会静默丢弃第 2..N 次点击）
+  const { isPdfExporting, enqueuePdfExport } = usePdfExport()
 
   const scrollToTop = () => {
     if (scrollContainerRef.current) {
@@ -335,33 +338,8 @@ export const CollectList: React.FC = () => {
   }
 
   const handleExportPdf = (taskId: string, taskName: string) => {
-    if (pdfDownloading) return
-    setPdfDownloading(true)
-    const sanitize = (name: string) =>
-      name
-        .replace(/"/g, '-')
-        .replace(/\|/g, '-')
-        .replace(/｜/g, '-')
-        .replace(/:/g, '：')
-        .replace(/”/g, '“')
-        .replace(/\?/g, '？')
-        .replace(/&/g, '+')
-        .replace(/\t/g, '')
-        .replace(/ /g, '')
-        .trim()
-    const safeName = sanitize(taskName) || taskId
-    const loadingId = addToast('正在生成PDF，请稍候...', 'info', Infinity)
-    downloadPdfBlob({ pid: taskId })
-      .then((blob) => {
-        downloadFileFromBlob(blob, `${safeName}.pdf`)
-        removeToast(loadingId)
-        addToast('PDF导出成功', 'success')
-      })
-      .catch((error) => {
-        removeToast(loadingId)
-        addToast(error?.message || 'PDF导出失败', 'error')
-      })
-      .finally(() => setPdfDownloading(false))
+    // 交给 usePdfExport 队列：per-task 禁用 + 并发上限 2 + 排队提示
+    enqueuePdfExport(taskId, taskName || taskId)
   }
 
   const getStatusText = (status: number) => {
@@ -586,7 +564,7 @@ export const CollectList: React.FC = () => {
                         <Button
                           variant="light"
                           size="sm"
-                          disabled={pdfDownloading}
+                          disabled={isPdfExporting(item.item.task_id)}
                           onClick={() => handleExportPdf(item.item.task_id, item.item.task_name)}
                           className="!p-2"
                         >

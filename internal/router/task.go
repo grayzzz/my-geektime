@@ -13,6 +13,10 @@ func task(public, private *gin.RouterGroup) {
 		private.GET("/task/list", api.List)
 		private.GET("/task/info", api.Info)
 		private.GET("/task/download", mw.PDFTimeout(), api.Download)
+		// 作业化下载：提交（幂等）+ 轮询进度。两个都是快接口，不需要超时中间件。
+		// 完成后前端仍走上面的 /task/download 取文件（命中课程缓存，秒回）。
+		private.POST("/task/download/prepare", api.DownloadPrepare)
+		private.GET("/task/download/status", api.DownloadStatus)
 		private.DELETE("/task/delete", api.Delete)
 		private.POST("/task/retry", mw.AccessToken(), api.Retry)
 		private.GET("/task/export", api.Export)

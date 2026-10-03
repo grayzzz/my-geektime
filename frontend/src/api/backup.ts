@@ -1,17 +1,16 @@
-import request from '@/utils/request'
+import { longRequest, TIMEOUT } from '@/utils/request'
 
-// 备份包可能很大（数万条评论/讨论，导出耗时可达几十秒），需覆盖默认 30s 超时
-const BACKUP_TIMEOUT = 600000
-
+// 备份包可能很大（数万条评论/讨论，导出耗时可达几十秒）。
+// 走 longRequest，超时预算集中定义在 @/utils/request 的 TIMEOUT，不再在本地写常量。
 export const exportBackup = () => {
-  return request.get<any, Blob>('/backup/export', {
+  return longRequest.get<any, Blob>('/backup/export', {
     responseType: 'blob',
-    timeout: BACKUP_TIMEOUT,
+    timeout: TIMEOUT.backup,
   })
 }
 
 export const importBackup = (file: File) => {
   const fd = new FormData()
   fd.append('file', file)
-  return request.post('/backup/import', fd, { timeout: BACKUP_TIMEOUT })
+  return longRequest.post('/backup/import', fd, { timeout: TIMEOUT.backup })
 }

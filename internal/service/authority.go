@@ -74,7 +74,9 @@ func SaveCookie(cookies string, identity string, auth *geek.AuthResponse) func(r
 
 func Authority(cookies string, after func(*http.Response) error) error {
 	jar, _ := cookiejar.New(nil)
-	global.HttpClient = &http.Client{Jar: jar, Timeout: 5 * time.Minute}
+	// 复用 global.Transport：换 jar 只影响 Cookie，不该顺手把连接池退回默认值
+	//（默认 MaxIdleConnsPerHost=2，会让上游请求频繁重新建连）。
+	global.HttpClient = &http.Client{Jar: jar, Timeout: 5 * time.Minute, Transport: global.Transport}
 	t := time.Now().UnixMilli()
 	authUrl := fmt.Sprintf("%s?t=%d&v_t=%d", authURL, t, t)
 

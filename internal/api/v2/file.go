@@ -69,7 +69,9 @@ func (f *File) Proxy(c *gin.Context) {
 	}
 
 	request.Header.Set("Referer", uri)
-	resp, err := http.DefaultClient.Do(request)
+	// 用 global.HttpClient 而不是 http.DefaultClient：后者不参与全局连接池调优
+	//（MaxIdleConnsPerHost=2），而渲染一章 PDF 就要拉 60~68 张图。
+	resp, err := global.HttpClient.Do(request)
 	if err != nil {
 		global.LOG.Error("file.proxy.Do", zap.String("cacheKey", cacheKey), zap.Error(err))
 		c.DataFromReader(404, 0, "", nil, nil)

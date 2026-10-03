@@ -4,7 +4,6 @@ import {
   deleteTask,
   retryTask,
   exportTask,
-  downloadPdfBlob,
   TaskItem,
 } from '@/api/task'
 import { downloadFileFromBlob } from '@/utils/request'
@@ -20,6 +19,7 @@ import { useToast } from '@/components/ui/Toast'
 import { useLessonList } from '@/hooks/useLessonList'
 import { Rocket, RefreshCw, Trash2, Heart, FileText, BookDown } from 'lucide-react'
 import { useDebounce } from '@/hooks/useDebounce'
+import { usePdfExport } from '@/hooks/usePdfExport'
 
 const productTypeOptions = [
   { label: '全部类型', value: 0 },
@@ -78,7 +78,9 @@ export const TaskList: React.FC = () => {
   const [loadMoreLoading, setLoadMoreLoading] = useState(false)
   const [hasMore, setHasMore] = useState(true)
   const [showBackToTop, setShowBackToTop] = useState(false)
-  const [pdfDownloading, setPdfDownloading] = useState(false)
+  // 课程 PDF 导出：per-task 状态 + 并发队列，替代旧的页面级 boolean 锁
+  // （旧实现 `if (pdfDownloading) return` 会静默丢弃第 2..N 次点击）
+  const { isPdfExporting, enqueuePdfExport } = usePdfExport()
   const observerRef = useRef<IntersectionObserver | null>(null)
   const loadMoreRef = useRef<HTMLDivElement | null>(null)
   const scrollContainerRef = useRef<HTMLElement | null>(null)
@@ -279,24 +281,9 @@ export const TaskList: React.FC = () => {
 
     const safeName = taskName ? sanitizeFileName(taskName) : pid
     // 课程 PDF 导出（走 axios + blob 下载，携带 token）
+    // 交给 usePdfExport 队列：per-task 禁用 + 并发上限 2 + 排队提示
     if (mode === 'course' && type === 'pdf') {
-      if (pdfDownloading) return
-      setPdfDownloading(true)
-      const loadingId = addToast('正在生成PDF，请稍候...', 'info', Infinity)
-      downloadPdfBlob({ pid })
-        .then((blob) => {
-          downloadFileFromBlob(blob, `${safeName}.pdf`)
-          removeToast(loadingId)
-          addToast('PDF导出成功', 'success')
-        })
-        .catch((error) => {
-          console.error('Failed to export PDF', error)
-          removeToast(loadingId)
-          addToast(error?.message || 'PDF导出失败', 'error')
-        })
-        .finally(() => {
-          setPdfDownloading(false)
-        })
+      enqueuePdfExport(pid, taskName || pid)
       return
     }
 
@@ -672,7 +659,7 @@ export const TaskList: React.FC = () => {
                   onRetry={handleRetry}
                   onDelete={handleDelete}
                   onCollect={handleSingleCollect}
-                  isExporting={pdfDownloading}
+                  isExporting={isPdfExporting(item.task_id)}
                   isCollected={item.is_collected}
                 />
               ))}

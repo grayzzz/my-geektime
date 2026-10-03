@@ -14,6 +14,8 @@ interface ToastContextType {
   toasts: Toast[]
   addToast: (message: string, type?: Toast['type'], duration?: number) => string
   removeToast: (id: string) => void
+  /** 就地更新文案（不重放动画、不重置倒计时）。用于长任务进度，如「渲染中 12/44 章」 */
+  updateToast: (id: string, message: string) => void
 }
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined)
@@ -84,6 +86,11 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setToasts((prev) => prev.filter((t) => t.id !== id))
   }, [])
 
+  // 只改 message：id 不变 ⇒ ToastItem 的 key 不变 ⇒ 不重放进场动画、不重置 duration 计时器。
+  const updateToast = useCallback((id: string, message: string) => {
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, message } : t)))
+  }, [])
+
   // 监听 API 错误事件，自动显示 Toast
   useEffect(() => {
     const handler = (event: Event) => {
@@ -97,7 +104,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [addToast])
 
   return (
-    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+    <ToastContext.Provider value={{ toasts, addToast, removeToast, updateToast }}>
       {children}
       <div className="fixed top-4 right-4 z-[9999] flex flex-col gap-2">
         {toasts.map((toast) => (

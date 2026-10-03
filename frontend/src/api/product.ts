@@ -1,4 +1,4 @@
-import request from '@/utils/request'
+import request, { longRequest } from '@/utils/request'
 
 export interface ProductListParams {
   page?: number
@@ -79,6 +79,9 @@ export const getArticleDiscussions = (params: { target_id: string; target_type: 
   return request.get('/product/article/discussions', { params })
 }
 
+// 缓存整门课程到本地：后端同步执行 —— 按 pid 拉上游目录（一次 500 条），
+// 再对**未入库**的章节逐个调上游取详情（串行 IO，见 internal/api/v2/product.go 的 Download）。
+// 大课轻松超过默认 30s，因此走 longRequest 而不是默认实例。
 export const downloadProduct = (params: { pid: number }) => {
-  return request.post('/product/download', params)
+  return longRequest.post('/product/download', params)
 }

@@ -386,6 +386,50 @@ func (t *Task) Delete(c *gin.Context) {
 	global.OK(c, nil)
 }
 
+// DownloadPrepare 提交课程级 PDF 导出作业（异步），立即返回作业状态快照。
+//
+// 为什么需要它：课程级 PDF 冷导出要 5~15 分钟。同步请求会让浏览器**零字节干等**
+// （实测 TTFB 330s），期间没有任何反馈，网络一抖就表现成 net::ERR_FAILED；
+// 用户也完全无法区分「在跑」和「挂了」。
+// 作业化后前端走「提交 → 轮询进度 → 完成后下载」。
+//
+// 幂等：同一 pid 已有进行中的作业会被复用，不会重复渲染。
+func (t *Task) DownloadPrepare(c *gin.Context) {
+	var req struct {
+		Pid string `json:"pid"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		global.FAIL(c, "fail.msg", err.Error())
+		return
+	}
+	if req.Pid == "" {
+		global.FAIL(c, "fail.msg", "pid is required")
+		return
+	}
+	job := service.SubmitCoursePDFJob(req.Pid)
+	global.LOG.Info("download.pdf.jobSubmit",
+		zap.String("pid", req.Pid),
+		zap.String("status", job.Status))
+	global.OK(c, job)
+}
+
+// DownloadStatus 查询课程级 PDF 导出作业的进度。
+//
+// 没有作业记录时返回 status="none"（而不是报错），前端据此决定重新提交 ——
+// 典型场景是后端重启过，内存里的作业状态没了，但磁盘上的章节/课程缓存都还在。
+func (t *Task) DownloadStatus(c *gin.Context) {
+	pid := c.Query("pid")
+	if pid == "" {
+		global.FAIL(c, "fail.msg", "pid is required")
+		return
+	}
+	if job, ok := service.GetCoursePDFJob(pid); ok {
+		global.OK(c, job)
+		return
+	}
+	global.OK(c, service.PDFJob{Pid: pid, Status: "none"})
+}
+
 func (t *Task) Download(c *gin.Context) {
 	var req task.TaskDownloadRequest
 	if err := c.ShouldBind(&req); err != nil {
@@ -462,20 +506,32 @@ func (t *Task) Download(c *gin.Context) {
 				global.FAIL(c, "fail.msg", err.Error())
 				return
 			}
-			pdfBytes, err := service.GenerateCoursePDF(c.Request.Context(), req.Pid)
+			// 返回**文件路径**而非 []byte：c.File 走 http.ServeFile，
+			// 会自动带 Content-Length 并流式拷贝（必要时还会处理 Range 请求）。
+			//
+			// ⚠️ 不能再用 c.Writer.Write(pdfBytes)：99MB 的响应没有 Content-Length，
+			// 只能 chunked 下发，浏览器无从判断完整性。实测（2026-10-03）用户侧
+			// 在干等 12 分钟、只收到 10.2MB 后报 net::ERR_FAILED
+			// （DevTools: Size 10,487 kB / Time 12.5 min）。
+			pdfPath, err := service.GenerateCoursePDFToFile(c.Request.Context(), req.Pid)
 			if err != nil {
 				global.FAIL(c, "fail.msg", err.Error())
 				return
+			}
+			fi, statErr := os.Stat(pdfPath)
+			var pdfSize int64
+			if statErr == nil {
+				pdfSize = fi.Size()
 			}
 			pdfFileName := service.VerifyFileName(courseTask.TaskName) + ".pdf"
 			global.LOG.Info("download.pdf.course",
 				zap.String("pid", req.Pid),
 				zap.String("filename", pdfFileName),
-				zap.Int("pdfBytes", len(pdfBytes)),
+				zap.Int64("pdfBytes", pdfSize),
+				zap.String("path", pdfPath),
 			)
-			c.Header("Content-Type", "application/pdf")
 			// 不使用 Content-Disposition: attachment，避免 IDM 拦截返回 204
-			c.Writer.Write(pdfBytes)
+			c.File(pdfPath)
 			return
 		} else {
 			// 单章 PDF 导出
@@ -492,7 +548,12 @@ func (t *Task) Download(c *gin.Context) {
 			)
 			c.Header("Content-Type", "application/pdf")
 			// 不使用 Content-Disposition: attachment，避免 IDM 等下载管理器拦截返回 204
-			c.Writer.Write(pdfBytes)
+			//
+			// 用 DataFromReader 而非 c.Writer.Write：前者（render.Reader）会显式带上
+			// Content-Length 再 io.Copy 流式下发。单章通常只有几 MB 影响不大，
+			// 但与课程级保持一致，避免「无长度 + chunked」这种易被中途重置的响应形态。
+			c.DataFromReader(200, int64(len(pdfBytes)), "application/pdf",
+				bytes.NewReader(pdfBytes), nil)
 			return
 		}
 	case "audio", "video":
