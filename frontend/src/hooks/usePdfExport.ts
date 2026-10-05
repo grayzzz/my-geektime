@@ -61,6 +61,32 @@ const POLL_TIMEOUT = 70 * 60 * 1000
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
+/** 轮询/下载请求的网络容错。
+ *
+ * 2026-10-03 实测：13 分钟的导出期间，某一次 status 轮询在连接层被重置
+ * （axios "Network Error"；vite 与后端日志均无该请求 —— 连接没到 handler），
+ * 而后端作业跑在 context.Background() 上照常完成并落盘。
+ * 一次瞬时抖动就判死整个导出是错误的 ⇒ 把「失败」收紧为「同一条请求
+ * 连续 MAX_REQUEST_ATTEMPTS 次都失败」。作业化轮询是幂等读，重试无副作用。
+ */
+const MAX_REQUEST_ATTEMPTS = 10
+const REQUEST_RETRY_BACKOFF = 3000
+
+const resilient = async <T>(fn: () => Promise<T>): Promise<T> => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (attempt >= MAX_REQUEST_ATTEMPTS) throw err
+      console.warn(
+        `[pdf-export] 请求失败，${REQUEST_RETRY_BACKOFF / 1000}s 后重试（${attempt}/${MAX_REQUEST_ATTEMPTS}）`,
+        err
+      )
+      await sleep(REQUEST_RETRY_BACKOFF)
+    }
+  }
+}
+
 /** 把作业状态翻译成一句人话，直接显示在 toast 上 */
 const describePhase = (job: PdfExportJob): string => {
   switch (job.status) {
@@ -91,7 +117,7 @@ const pollPdfExportJob = async (
   onProgress?: (job: PdfExportJob) => void
 ): Promise<PdfExportJob> => {
   const deadline = Date.now() + POLL_TIMEOUT
-  let job = await preparePdfExport(pid)
+  let job = await resilient(() => preparePdfExport(pid))
   onProgress?.(job)
 
   while (job.status !== 'done') {
@@ -102,9 +128,10 @@ const pollPdfExportJob = async (
       throw new Error('导出超时（已等待超过 70 分钟），请稍后重试 —— 已渲染的章节会被缓存，重试会快很多')
     }
     await sleep(POLL_INTERVAL)
-    job = await getPdfExportStatus(pid)
+    job = await resilient(() => getPdfExportStatus(pid))
     if (job.status === 'none') {
-      job = await preparePdfExport(pid)
+      // 后端重启等导致内存作业表丢失：重新提交即可（章节/课程 PDF 都在磁盘，命中缓存秒回）
+      job = await resilient(() => preparePdfExport(pid))
     }
     onProgress?.(job)
   }
@@ -149,8 +176,10 @@ export const usePdfExport = () => {
     pollPdfExportJob(pid, (job) => {
       updateToast(toastId, `正在生成《${label}》PDF：${describePhase(job)}`)
     })
-      // 作业 done 之后才取文件：此时命中课程级磁盘缓存，是秒回而不是十几分钟
-      .then(() => downloadPdfBlob({ pid }))
+      // 作业 done 之后才取文件：此时命中课程级磁盘缓存，是秒回而不是十几分钟。
+      // 下载同样套 resilient：85MB 经 vite 代理转发，一次连接抖动不该废掉整个导出
+      //（缓存命中 ⇒ 重试成本极低；axios 拿不到完整 blob 就不会触发浏览器下载，重试安全）
+      .then(() => resilient(() => downloadPdfBlob({ pid })))
       .then((blob) => {
         downloadFileFromBlob(blob, `${safeName}.pdf`)
         removeToast(toastId)
