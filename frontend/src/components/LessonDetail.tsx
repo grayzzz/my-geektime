@@ -748,7 +748,12 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
     initHls()
     
     return destroyHls
-  }, [videoSrc, showFloatingPlayer])
+    // ⚠️ 必须依赖 loading：内联播放器只在 `!loading` 时渲染（见下方 render），
+    // 而 taskInfo 到达（videoSrc 就绪）与 setLoading(false) 之间隔着一次
+    // `await getProgress`，所以 videoSrc 先有值、<video> 后挂载。
+    // 若此处不依赖 loading，effect 会在 <video> 还不存在时跑一次并 return，
+    // 之后 videoSrc 不再变化 → hls 永不初始化 → 播放器只显示封面、点播放无反应。
+  }, [videoSrc, showFloatingPlayer, loading])
 
   if (!show) return null
 
