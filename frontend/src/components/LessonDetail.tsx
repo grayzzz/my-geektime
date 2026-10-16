@@ -123,6 +123,8 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       }
     }
     flushProgress()
+    // 关闭抽屉时复位浮动关闭标记，避免下次打开同一章节后自动浮动失效
+    floatingDismissedRef.current = false
     onClose()
   }, [flushProgress, onClose])
   const [loading, setLoading] = useState(false)
@@ -134,6 +136,9 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   const article = taskInfoResponse?.article || null
   const playUrl = taskInfoResponse?.play_url
   const [showFloatingPlayer, setShowFloatingPlayer] = useState(false)
+  // 用户主动关闭浮动窗口后置 true：阻止滚动监听把窗口立刻又弹回来。
+  // 只有在视频重新滚回视野内（rect.bottom > 200）时才复位，恢复「滚出视野自动浮动」。
+  const floatingDismissedRef = useRef(false)
   const [floatingPosition, setFloatingPosition] = useState({ x: 20, y: 80 })
   const [floatingSize, setFloatingSize] = useState({ width: 300, height: 220 })
   const [isDragging, setIsDragging] = useState(false)
@@ -289,6 +294,7 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       
       prevTaskIdRef.current = taskId
       setLoading(true)
+      floatingDismissedRef.current = false
       setShowFloatingPlayer(false)
       setShowScrollTop(false)
       setComments([])
@@ -393,8 +399,13 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
       if (isMobileRef.current) {
         setShowFloatingPlayer(false) // 手机端禁用浮动播放器
       } else if (rect.bottom < 100) {
-        setShowFloatingPlayer(true)
+        // 视频滚出视野：自动浮动。但用户刚点过关闭时不弹回，否则「X」形同虚设
+        if (!floatingDismissedRef.current) {
+          setShowFloatingPlayer(true)
+        }
       } else if (rect.bottom > 200) {
+        // 视频回到视野内：复位关闭标记，之后再次滚出视野仍可自动浮动
+        floatingDismissedRef.current = false
         setShowFloatingPlayer(false)
       }
 
@@ -615,12 +626,22 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
   }, [])
 
   const scrollToVideo = () => {
-    if (videoContainerRef.current && contentRef.current) {
+    // 浮动模式下 videoContainerRef 为空（占位块未挂 ref），不能再拿它做前置条件，
+    // 否则「返回原位置」按钮点了没反应
+    if (contentRef.current) {
       contentRef.current.scrollTo({
         top: 0,
         behavior: 'smooth'
       })
-      handleFloatingToggle(false)
+    }
+    if (showFloatingPlayer) {
+      // smooth 滚动过程中 rect.bottom 仍 < 100，先打标记避免自动浮起闪烁；
+      // 滚到顶后 rect.bottom > 200 会自动复位标记
+      floatingDismissedRef.current = true
+      saveVideoState()
+      setTimeout(() => {
+        setShowFloatingPlayer(false)
+      }, 0)
     }
   }
 
@@ -747,6 +768,10 @@ export const LessonDetail: React.FC<LessonDetailProps> = ({
 
   const handleFloatingToggle = (newState: boolean) => {
     saveVideoState()
+    if (!newState) {
+      // 关闭浮动窗口：打标记，避免滚动监听在同一帧/下一次滚动时又把它弹回来
+      floatingDismissedRef.current = true
+    }
     setTimeout(() => {
       setShowFloatingPlayer(newState)
     }, 0)
