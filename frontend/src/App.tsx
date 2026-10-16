@@ -7,6 +7,7 @@ import { ToastProvider } from '@/components/ui/Toast'
 import { GlobalLoading } from '@/components/GlobalLoading'
 import { GlobalSettings } from '@/components/GlobalSettings'
 import { initTheme } from '@/utils/theme'
+import { initFavicon } from '@/utils/favicon'
 import { Login } from '@/pages/Login'
 import { Register } from '@/pages/Register'
 import GitHubCallback from '@/pages/GitHubCallback'
@@ -34,6 +35,8 @@ const App: React.FC = () => {
     init()
     // 初始化主题
     initTheme()
+    // 站点图标跟随主题
+    initFavicon()
   }, [init])
 
   return (
