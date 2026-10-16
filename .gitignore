@@ -38,9 +38,12 @@ node_modules/
 .venv/
 __pycache__/
 
-# web
+# web（前端构建产物，由 frontend/dist 同步而来；源头在 frontend/public 与 frontend/src）
 web/assets/
 web/index.html
+web/favicon.ico
+web/apple-touch-icon.png
+web/icon-256.png
 
 
 # AI 工具本地配置

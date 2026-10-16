@@ -7,7 +7,17 @@
  * 在 `initFavicon()` 与 `themeChange` 事件里替换 <link rel="icon">，
  * 于是切主题标签页图标立刻跟着变色，以后新增主题也自动覆盖、无需补文件。
  *
- * 静态兜底：`public/favicon.ico`（科技蓝，多尺寸）负责首屏绘制与不支持 SVG 图标的浏览器。
+ * ⚠️ 关键约束：整个文档**任何时候只能有一条** `link[rel~="icon"]`。
+ * head 里如果同时存在 `index.html` 的静态 `/favicon.ico` 和这里的 SVG，
+ * 浏览器会择优只采纳一条，实测 Chromium 会挑走 `.ico`（它声明了 `sizes="any"`、
+ * 又排在前面），SVG 那条连解码都不会发生 —— 表现为「切主题图标纹丝不动」。
+ * 所以这里不是「新增一条」，而是**接管** head 里已有的那条（见 `ensureIconLink`）。
+ *
+ * 验证方式（无头浏览器不下载 favicon，测不出来）：有头跑一次，再读 profile 里的
+ * `Default/Favicons` SQLite，比对 `favicon_bitmaps.image_data` 的主色。
+ * 脚本见 `.workbuddy/favicon/probe_real_favicon.py`。
+ *
+ * 静态兜底：`public/favicon.ico`（科技蓝，多尺寸）负责 JS 接管前的首屏绘制。
  */
 
 import { themes, getCurrentTheme } from './theme'
@@ -36,6 +46,9 @@ const BAR = {
 }
 
 const SVG_LINK_ID = 'theme-svg-favicon'
+
+/** 记住上次写入的 href，避免同一主题重复重建节点 */
+const appliedHref = new Map<string, string>()
 
 const round2 = (n: number): number => Math.round(n * 100) / 100
 
@@ -101,24 +114,54 @@ export function buildFaviconSvg(themeName?: string): string {
   )
 }
 
+/**
+ * 拿到「那一条」icon link。
+ *
+ * 优先复用 `index.html` 里已有的静态 `.ico` 节点（`id` 换成 SVG_LINK_ID 就地接管），
+ * 没有再自己建。目的是保证 head 里始终只有一条 `rel="icon"`，
+ * 避免浏览器在 `.ico` 与 SVG 之间择优时把 SVG 挤掉。
+ * 顺带清掉可能由 HMR／重复挂载留下的同名多余节点。
+ */
+function ensureIconLink(): HTMLLinkElement {
+  let link = document.getElementById(SVG_LINK_ID) as HTMLLinkElement | null
+  if (link) return link
+
+  // `rel~="icon"` 是空白分隔的整词匹配，不会误命中 apple-touch-icon
+  const candidates = Array.from(
+    document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')
+  )
+  link = candidates.shift() ?? document.createElement('link')
+
+  // 多余的也一并移除，否则又变回多条竞争
+  candidates.forEach((extra) => extra.remove())
+
+  link.id = SVG_LINK_ID
+  link.rel = 'icon'
+  if (!link.isConnected) document.head.appendChild(link)
+  return link
+}
+
 /** 把 <link rel="icon"> 换成当前主题的 SVG 图标 */
 export function applyFavicon(themeName?: string): void {
   if (typeof document === 'undefined') return
 
   const name = themeName || getCurrentTheme()
   const href = `data:image/svg+xml,${encodeURIComponent(buildFaviconSvg(name))}`
+  if (appliedHref.get(SVG_LINK_ID) === href) return
 
-  let link = document.getElementById(SVG_LINK_ID) as HTMLLinkElement | null
-  if (!link) {
-    link = document.createElement('link')
-    link.id = SVG_LINK_ID
-    link.rel = 'icon'
-    link.type = 'image/svg+xml'
-    // 追加在静态 .ico 之后：支持 SVG 图标的浏览器优先用它，其余继续用 .ico 兜底
-    document.head.appendChild(link)
-  }
+  const link = ensureIconLink()
+  link.type = 'image/svg+xml'
+  // 矢量图标声明 sizes="any" 是规范做法；同时抹掉 .ico 时代残留的尺寸声明
+  link.setAttribute('sizes', 'any')
 
+  // 重建节点而不是原地改 href：部分浏览器不认「改 href」，只认新节点出现。
+  // 全程仍然只有这一条，不会重新引入竞争。
+  const parent = link.parentNode ?? document.head
+  link.remove()
   link.setAttribute('href', href)
+  parent.appendChild(link)
+
+  appliedHref.set(SVG_LINK_ID, href)
 }
 
 let initialized = false
